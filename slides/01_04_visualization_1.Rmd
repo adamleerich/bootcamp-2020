@@ -1,0 +1,317 @@
+---
+title: Simple Visualizations
+editor_options:
+  chunk_output_type: console
+title-slide-attributes:
+  data-background-image: "../slide_input/background-viz.jpg"
+  class: "center"
+---
+
+
+```{r include=FALSE}
+source('common.R')
+```
+
+```{r, echo=FALSE}
+op <- par(no.readonly = TRUE)
+library(ggplot2)
+```
+
+
+## Graphics
+
+* There are a lot of packages in R that do graphics.
+* We're going to talk about two graphics systems: base graphics and `ggplot2`.
+* Why both?
+* **`ggplot2` makes it easier to build more customized visualizations**, 
+  but it can take some time to get used to.
+* However, base graphics will always have its place.  For example
+    + Your basic function is `plot`.
+    + It's really smart.
+    + Just pass it something and it probably knows what to do with it.
+    + **Most objects have a smart version of `plot`.**
+
+
+
+## Prelims
+
+* Load the `ggplot2` package using `include`
+* Take a look at a few data sets before we start
+    + `cars`
+    + `iris`
+* Head on over to rstudio.com and download the visualization cheatsheet
+
+
+
+
+## Scatter plots
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r}
+# Equivalent to 
+# plot(x = cars$speed, y = cars$dist)
+plot(cars)
+```
+:::
+::: {.column}
+```{r}
+ggplot(data = cars) +
+  aes(x = speed, y = dist) + 
+  geom_point()
+```
+:::
+::::::::::::::
+
+
+
+
+
+## Histograms
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r}
+x <- rnorm(1e3, mean = 10e3, sd = 20e3)
+hist(x)
+```
+:::
+::: {.column}
+```{r}
+ggplot() + 
+  aes(x = x) + geom_histogram()
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+
+## Specify binwidths
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r}
+x <- rnorm(1e3, mean = 10e3, sd = 20e3)
+hist(x, breaks = 20)
+```
+:::
+::: {.column}
+```{r}
+ggplot() + aes(x = x) + 
+  geom_histogram(bins = 20)
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+## Barplots
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r}
+regions <- c(west = 40, south = 20, 
+  north = 43, east = 12, midwest = 4)
+barplot(regions)
+```
+:::
+::: {.column}
+```{r}
+ggplot() + 
+  aes(x = names(regions), y = regions) + 
+  geom_col()
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+
+
+## Box plots
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r}
+boxplot(
+  Sepal.Length ~ Species, 
+  data = iris)
+```
+:::
+::: {.column}
+```{r}
+ggplot(data = iris) + 
+  aes(x = Species, y = Sepal.Length) + 
+  geom_boxplot()
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+## Q-Q Plots
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r}
+x <- rnorm(1000)
+qqnorm(x)
+```
+:::
+::: {.column}
+```{r}
+ggplot() + aes(sample = x) + 
+  stat_qq()
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+## Linear model diagnostic plots
+
+```{r, eval=FALSE}
+model <- lm(Sepal.Width ~ Petal.Width + Species, data = iris)
+plot(model)
+```
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r, echo=FALSE}
+model <- lm(Sepal.Width ~ Petal.Width + Species, data = iris)
+plot(model, which = 1)
+```
+:::
+::: {.column}
+```{r, echo=FALSE}
+plot(model, which = 2)
+```
+:::
+::::::::::::::
+
+
+
+
+
+## Linear model diagnostic plots
+
+```{r, eval=FALSE}
+model <- lm(Sepal.Width ~ Petal.Width + Species, data = iris)
+plot(model)
+```
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r, echo=FALSE}
+model <- lm(Sepal.Width ~ Petal.Width + Species, data = iris)
+plot(model, which = 3)
+```
+:::
+::: {.column}
+```{r, echo=FALSE}
+plot(model, which = 5)
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+## Easy plotting of data frames
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r}
+plot(iris)
+```
+:::
+::: {.column}
+```{r warning=FALSE, message=FALSE, error=FALSE}
+GGally::ggpairs(iris)
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+## Adding layers
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r}
+plot(cars)
+abline(
+  lm(cars$dist ~ cars$speed), 
+  lwd = 2, 
+  col = 'blue')
+```
+:::
+::: {.column}
+```{r}
+ggplot(data = cars) + 
+  aes(x = speed, y = dist) + 
+  geom_point() + geom_smooth(
+    formula = y ~ x, 
+    method = "lm", se = FALSE)
+```
+:::
+::::::::::::::
+
+
+
+
+
+## Labels
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r}
+plot(
+  cars, main = 'Cars',  
+  xlab = 'mph',
+  ylab = 'ft')
+```
+:::
+::: {.column}
+```{r}
+ggplot(data = cars) + 
+  aes(x = speed, y = dist) + 
+  geom_point() + ggtitle('Cars') +
+  xlab('mph') + ylab('Distance ft')
+```
+:::
+::::::::::::::
+
+
+
+
+## Exercises
+
+* Pick two continuous variables from the `iris` data set
+* Do a scatter plot using base R
+* Create a scatter plot using `ggplot2`
+* Add fit lines to both
+* BONUS How can you add an error range to the `ggplot2` fit?
+
+
