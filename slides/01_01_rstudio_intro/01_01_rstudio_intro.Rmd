@@ -1,0 +1,232 @@
+---
+title: R Bootcamp
+---
+
+```{r include = FALSE}
+source('common.R')
+```
+
+## R Bootcamp
+
+Welcome!!
+
+
+## Who are you guys?
+
+* Adam - Adam.Rich@beazley.com
+* Brian - bfannin@casact.org
+
+## Teams logistics
+
+* If an instructor isn't speaking, they're listening and monitoring the chat
+* Send a message in the chat if you want help
+
+## Day one schedule 
+
+| Start        | End      | Duration | What                                                | Who      |
+|-------------:|---------:|:--------:|:----------------------------------------------------|:--------:|
+|  1:00 PM     |  1:15 PM	|  0:15	   | [Introductions](01_01_rstudio_intro.html)           | Both     | 
+|  1:15 PM     |  1:45 PM	|  0:30    | [Getting Started](01_01_rstudio_intro.html#lets-get-started) | Brian    | 
+|  1:45 PM     |  2:30 PM	|  0:45    | [Data Structures](01_02_data_structures_full.html)	 | Adam     | 
+|  2:30 PM     |  3:00 PM	|  0:30    | Break	                                             |          | 
+|  3:00 PM     |  4:00 PM	|  0:60	   | [Data Import/Export](01_03_data_import_export.html) | Brian    | 
+|  4:00 PM     |  4:45 PM	|  0:45	   | [Visualization #1](01_04_visualization_1_full.html) | Adam     | 
+|  4:45 PM     |  5:00 PM	|  0:15	   | Capstone Intro                                      | Capstone | 
+
+# Let's get started
+
+## Basics
+
+* RStudio setup
+* Saving and sourcing scripts
+* RStudio projects
+
+## In general
+
+```{r echo = FALSE, out.height = "600px"}
+knitr::include_graphics('images/options_general.png')
+```
+
+## Keeping up appearances
+
+```{r echo = FALSE, out.height = "600px"}
+knitr::include_graphics('./images/options_appearance.png')
+```
+
+## It panes me to say it
+
+```{r echo = FALSE, out.height = "600px"}
+knitr::include_graphics('./images/options_pane_layout.png')
+```
+
+<!-- * What they all do -->
+<!-- * Change the location of the panes -->
+
+## Basic operations
+
+```{r, echo=TRUE}
+2 + 5
+-2 ^ 0.5 # which operator takes precedence
+sqrt(2)
+abs(-15.4)
+3 > 4 # logical
+```
+
+## Objects
+
+```{r}
+my_name <- "Brian"
+my_name
+my_age <- 48
+my_age
+```
+
+## Naming objects
+
+* Clarity <> brevity
+    * `loss_ratio` > `lr`
+    * The time you save typing will be spent debugging
+* Autocomplete is your friend
+    * You won't have to type complete words
+* Use noun, then modifier, as in Spanish (auto roja)
+    * `premium_earned` > `earned_premium`
+    * `rate_increase_texas` > `texas_rate_increase`
+* Nouns for objects, verbs for functions
+* Pick a convention and stick with it.
+    * https://style.tidyverse.org/
+    * https://google.github.io/styleguide/Rguide.html
+
+## The pipe
+
+Found in the `magrittr` package. 
+
+CTRL+SHIFT+M in RStudio
+
+```{r}
+exp(sqrt(pi))
+library(magrittr)
+
+pi %>% 
+  sqrt() %>% 
+  exp()
+```
+
+## Help
+
+```{r eval=FALSE}
+?plot
+??cluster
+```
+
+Youll find loads of help on the internet. Two good options:
+
+* [Stack Overflow.com](https://stackoverflow.com/)
+* [RStudio community](https://community.rstudio.com/)
+
+## Code execution
+
+CTRL+ENTER
+
+90% of your code writing and execution will be done in scripts. Use the console for getting help or one-off operations like: package installation, light debugging.
+
+## Speaking of debugging
+
+R has a debugging framework. I rarely use it.
+
+The combination of environment pane and REPL does 98% of what I need. YMMV
+
+## Keyboard shortcuts
+
+* ALT+SHIFT+K
+
+| Shortcut      | Result            |
+|---------------|-------------------|
+| ALT+-         | `<-`              |
+| CTRL+ENTER    |  Execute a line   |
+| CTRL+1        | Go to source pane |
+| CTRL+2        | Go to console     |
+| CTRL+SHIFT+M  | ` %>% `           |
+| CTRL+L        | Clear the console |
+| CTRL+SHIFT+N  | New script        |
+| CTRL+W        | Close this tab    |
+| CTRL+SHIFT+F  | Find in files     |
+| CTRL+SHIFT+B  | Build             |
+
+
+## The working directory
+
+```{r}
+getwd()
+```
+
+You will probably never have a good reason to call `setwd()`. Use a project instead.
+
+## Working directory in RStudio
+
+```{r echo = FALSE, out.height = "600px"}
+knitr::include_graphics('images/working_directory.png')
+```
+
+## Projects
+
+* Collect all of the files relevant to a project
+* Automatically set the working directory 
+* Intermediate stuff:
+  * Version control
+  * Package development
+  * CTRL-SHIFT-B
+  
+Let's all create one now.
+
+## Project directory in RStudio
+
+```{r echo = FALSE, out.height = "600px"}
+knitr::include_graphics('images/project_directory.png')
+```
+
+## Directory paths
+
+* Windows paths are constructed with the backward slash "\\" separator
+* mac, *nix machines construct paths with the forward slash "/" separator
+* Furthermore, in R, the backward slash "\\" is used for things like tabs and newline characters
+* If you really need a slash and aren't intending to "escape" the next character, just type it twice
+* Foreshadowing: For a painless, OS-independent approach to constructing paths to files, use the `file.path()` function
+
+## Installing and using packages
+
+This should have been done before you got here. Quick review.
+
+* Packages are additional code libraries
+* The must be installed in order to be loaded
+* They must be loaded in order to be used
+
+## Installation vs. library
+
+1. `install.packages()` copies files to your computer.
+2. `library()` finds those files and loads them into memory.
+3. When you turn off your computer, the files are unloaded from memory.
+4. Files on your computer don't disappear when you turn off your computer.
+
+## Package installation folder
+
+```{r}
+.libPaths()
+```
+
+## Avoidable rookie mistakes
+
+* Typing code in the console rather than a script
+* Calling `setwd()` in a script
+* Saving the workspace
+* Looking at the "History" tab
+* Not using RStudio projects
+* Forgetting to add a call to `library()` for a package that you need
+* Assuming that you can name objects whatever you like
+* Assuming that coding style has no value
+
+## Exercise
+
+1. Create a project to use during the bootcamp.
+1. Create a folder in that project called 'data'.
+3. Create a script which executes the line `1 + 1`.
+4. Execute that script.

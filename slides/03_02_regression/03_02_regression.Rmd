@@ -1,0 +1,471 @@
+---
+title: OLS Regression
+---
+
+```{r include=FALSE}
+source('common.R')
+```
+
+## Schedule
+
+| Start        | End      | Duration | What                                           | Who      |
+|-------------:|---------:|:--------:|:-----------------------------------------------|:--------:|
+|  1:00 PM     |  2:00 PM	|  0:60	   | [Review](02_01_day_one_review.html)            | Brian    | 
+|  2:00 PM     |  3:00 PM	|  0:60    | [`dplyr`](02_02_TBD.html)        	                              | Adam     | 
+|  3:00 PM     |  3:30 PM	|  0:30    | Break	                                        | You      | 
+|  3:30 PM     |  4:15 PM	|  0:45	   | [OLS Regression](02_03_regression.html)        | Brian    | 
+|  4:15 PM     |  5:00 PM	|  0:45	   | Tree-based methods                             | Adam     | 
+
+# Linear regression
+
+## Nomenclature
+
+* target, response, prediction
+* covariate, predictor
+
+## What are we assuming?
+
+* Model is a pragmatic simulation of something complicated
+* Response is a linear transform of an underlying random variable
+* Reponse is an erroneous measurement of "truth"
+* Response is the result of a stochastic process
+
+## Fake it till you make it
+
+```{r}
+library(tidyverse)
+
+num_sims <- 1e3
+b_0 <- 5
+b_1 <- -3
+b_2 <- 2.5
+regions <- c('north', 'south', 'east', 'west')
+
+set.seed(1234)
+tbl_ols <- tibble(
+  x_1 = runif(num_sims, 0, 10)
+  , x_2 = runif(num_sims, 30, 60)
+  , x_3 = runif(num_sims, 200, 300)
+  , x_4 = sample(regions, num_sims, replace = TRUE)
+  , e = rnorm(num_sims, mean = 0, sd = 1)
+)
+```
+
+## And some categorical data
+
+```{r }
+tbl_ols <- tbl_ols %>% 
+  mutate(
+    y = b_0 + b_1 * x_1 + b_2 * x_2 + e
+    , y = y + case_when(
+      x_4 == 'north' ~ 10
+      , x_4 == 'south' ~ -20
+      , x_4 == 'east' ~ 50
+      , x_4 == 'west' ~ -70
+    )
+  )
+```
+
+## Visual EDA
+
+```{r}
+tbl_ols %>%
+  select(-e) %>% 
+  plot()
+```
+
+## Visual EDA two
+
+```{r}
+tbl_ols %>% 
+  boxplot(y ~ x_4, data = .)
+```
+
+## Tabular EDA
+
+```{r}
+tbl_ols %>%
+  select(x_1, x_2, x_3) %>% 
+  cor()
+```
+
+## Fit a model
+
+```{r}
+fit_1 <- tbl_ols %>% 
+  lm(
+    formula = y ~ x_1
+  )
+```
+
+## Predict
+
+```{r}
+# tired
+predict(fit_1) %>% 
+  head()
+
+# wired
+tbl_ols <- tbl_ols %>% 
+  mutate(
+    predict_one = predict(fit_1)
+  )
+```
+
+## That was it
+
+No, really. We're done with building the model.
+
+It's just a call to `lm()`. No fussing with MLE, QR decomposition, matrix notation, or writing optimal code to arrive at the answer. The calibration has been done for you.
+
+Any jerk can build a model.
+
+# Formulas
+
+## Formulas are models
+
+We build a model through formulas.
+
+What data do we think will predict our target?
+
+`~` similar to its use in stats. $X \sim N(\mu, \sigma)$
+
+I read `~` as "is modelled as".
+
+## Formulas
+
+
+| Formula                | What it means                                |
+|------------------------|----------------------------------------------|
+| y ~ x_1                | `y` deviates from an average by an amount scaled to `x_1`   |
+| y ~ 1 + x_1            | Same as the above                            |
+| y ~ 1                  | The sample average should be used to predict |
+| y ~ 0 + x_1            | `y` is modeled as a constant scale of `x_1`  |
+| y ~ 1 + x_1 + x_2      | `y` deviates from average by amounts scaled to `x_1` and `x_2` |
+| y ~ 1 + I(x_1 + x_2)   |  use `I()` for operations |
+| y ~ x_1 + x2 + x_1:x_2 | Interactions: `x_1` and `x_2` matter more together |
+| y ~ x_1 * x_2          | Give me all combinations of `x_1` and `x_2` |
+| y ~ .                  | Use everything                              |
+
+<aside class="notes">
+Formulas place the response variable on the left and an expression to the right of the `~` character. That character may be read as "is modelled as".
+  
+An intercept is implicit. To rermove it, use a "0" or "-1" in the expression
+  
+The "+" does not mean addition in the algebraic sense. It means we're adding another predictor variable to our model. To use arithmetic operations, wrap expressions in I()
+  
+The : is used for interactions.
+</aside>
+
+## Better by design
+
+$$
+y_{i} = x_{ij} * \beta_i^T
+$$
+
+The formula and linear algebra are all about constructing a design matrix. This is the data that will exist in your model. 
+
+What data? Let's look. We can do this with the `model.matrix()` function.
+
+## Univariate regression
+
+```{r}
+tbl_ols %>% 
+  model.matrix(y ~ x_1, data = .) %>% 
+  head()
+```
+
+## Explicit intercept
+
+```{r}
+tbl_ols %>% 
+  model.matrix(y ~ 1 + x_1, data = .) %>% 
+  head()
+```
+
+## Multivariate
+
+```{r}
+tbl_ols %>% 
+  model.matrix(y ~ x_1 + x_2, data = .) %>% 
+  head()
+```
+
+## Interaction -> multiplication
+
+```{r}
+tbl_ols %>% 
+  model.matrix(y ~ x_1 + x_1:x_2, data = .) %>% 
+  head()
+```
+
+Classic interaction: obesity and smoking as predictors of heart disease
+
+## Star means everything
+
+```{r}
+tbl_ols %>% 
+  model.matrix(y ~ x_1*x_2, data = .) %>% 
+  head()
+```
+
+## Everything!
+
+```{r}
+tbl_ols %>% 
+  model.matrix(y ~ 0 + x_1*x_2*x_3, data = .) %>% 
+  head()
+```
+
+## Categories
+
+```{r}
+tbl_ols %>% 
+  model.matrix(y ~ x_4, data = .) %>% 
+  head()
+```
+
+Also called "dummy variables", or "one hot encoding"
+
+## Categories and real
+
+```{r}
+tbl_ols %>% 
+  model.matrix(y ~ 0 + x_1 + x_4, data = .) %>% 
+  head()
+```
+
+## Categories and real interactions
+
+```{r}
+tbl_ols %>% 
+  model.matrix(y ~ 0 + x_1:x_4, data = .) %>% 
+  head()
+```
+
+## 
+
+:::::::::::::: {.columns}
+::: {.left width="50%"}
+```{r}
+tbl_ols %>% 
+  model.matrix(y ~ 0 + x_1 + x_4, data = .) %>% 
+  head()
+```
+:::
+
+::: {.right width="50%"}
+```{r}
+tbl_ols %>% 
+  model.matrix(y ~ 0 + x_1:x_4, data = .) %>% 
+  head()
+```
+:::
+::::::::::::::
+
+# Diagnose
+
+## Summary
+
+```{r}
+summary(fit_1)
+```
+
+## Extract data from the fit
+
+| Element | What it shows       |
+|------|------------------------|
+| residuals | weighted residuals  |
+| coefficients  | coefficients    |
+| sigma | square root |
+| df | degrees of freedom  |
+| fstatistic | The F-stat |
+| r.squared  | r^2   |
+| adj.r.squared  | r^2 penalized for more parameters |
+| cov.unscaled  | covariance matrix  |
+| correlation   | correlation matrix  |
+
+## Visualize the prediction
+
+```{r}
+tbl_fit_one <- tbl_ols %>% 
+  mutate(
+    y_hat = predict(fit_1)
+  )
+```
+
+## Visualize the prediction
+
+```{r}
+tbl_fit_one %>% 
+  ggplot(aes(x_1)) + 
+  geom_point(aes(y = y)) + 
+  geom_line(aes(y = y_hat))
+```
+
+## Visualize the prediction
+
+```{r}
+tbl_fit_one %>% 
+  ggplot(aes(y_hat, y)) + 
+  geom_point() + 
+  geom_abline(slope = 1, intercept = 0, color = "red")
+```
+
+## Add residuals
+
+```{r}
+tbl_fit_one <- tbl_fit_one %>% 
+  mutate(
+    residual = residuals(fit_1)
+    , resid_standard = rstandard(fit_1)
+  )
+```
+
+## Visualize the residuals
+
+```{r}
+tbl_fit_one %>% 
+  ggplot(aes(y_hat, residual)) + 
+  geom_point()
+```
+
+## Visualize the residuals
+
+```{r}
+tbl_fit_one %>% 
+  ggplot(aes(y_hat, resid_standard)) + 
+  geom_point() + 
+  geom_hline(yintercept = c(-3,3), color = "red")
+```
+
+## What are we looking for?
+
+* Heteroskedasticity => We should change the weights applied to the observations
+* Doesn't look like "noise"
+    * Serial correlation => Use a time series
+    * Apply a transform (polynomial, trig, etc.)
+* Extreme values => A normal distribution may not be appropriate
+
+## Visualize residuals against other predictors
+
+```{r}
+tbl_fit_one %>% 
+  ggplot(aes(x_2, resid_standard)) + 
+  geom_point() + 
+  geom_hline(yintercept = c(-3,3), color = "red")
+```
+
+## Try more models
+
+```{r}
+fit_2 <- tbl_ols %>% 
+  lm(formula = y ~ x_1 + x_2)
+
+fit_3 <- tbl_ols %>% 
+  lm(formula = y ~ x_1 + x_2 + x_3)
+
+fit_4 <- tbl_ols %>% 
+  lm(formula = y ~ x_1 + x_3)
+```
+
+## Augment
+
+```{r}
+augment_model <- function(tbl_in, fit_in) {
+
+  tbl_in %>% 
+    mutate(
+      residual = residuals(fit_in)
+      , resid_standard = rstandard(fit_in)
+      , y_hat = predict(fit_in)
+    )  
+}
+
+tbl_fit_two <- tbl_ols %>% augment_model(fit_2)
+tbl_fit_three <- tbl_ols %>% augment_model(fit_3)
+tbl_fit_four <- tbl_ols %>% augment_model(fit_4)
+```
+
+## Visualize simultaneously
+
+```{r}
+tbl_fit_one %>% ggplot(aes(y_hat, resid_standard)) + 
+  geom_point(color = 'blue') + 
+  geom_point(color = 'green', data = tbl_fit_two) + 
+  geom_point(color = 'orange', data = tbl_fit_three) + 
+  geom_point(color = 'pink', data = tbl_fit_four)  
+```
+
+
+## One more models
+
+```{r}
+fit_5 <- tbl_ols %>%
+  select(-e) %>% 
+  lm(formula = y ~ .)
+
+tbl_fit_five <- tbl_ols %>% augment_model(fit_5)
+```
+
+## Visualize one more
+
+```{r}
+tbl_fit_five %>% ggplot(aes(y_hat, resid_standard)) + 
+  geom_point(color = 'blue')
+```
+
+## Tabular look at multiple models
+
+```{r}
+library(broom)
+
+fit_5 %>% 
+  tidy()
+```
+
+## Sweeping up
+
+```{r}
+lst_fits <- list(
+  one = fit_1
+  , two = fit_2
+  , three = fit_3
+  , four = fit_4
+  , five = fit_5
+)
+
+tbl_fits <- purrr::map_dfr(
+  lst_fits
+  , glance)
+
+tbl_fits <- tbl_fits %>% 
+  mutate(model_name = names(lst_fits)) %>% 
+  select(model_name, everything())
+```
+
+## Lots of models
+
+```{r echo = FALSE}
+tbl_fits %>% 
+  select(1:6) %>% 
+  knitr::kable()
+  
+tbl_fits %>% 
+  select(1, 7:12) %>% 
+  knitr::kable()
+```
+
+# Wrapping up
+
+## What we did
+
+* Create a model based on some data
+* Create a few more models based on data
+
+
+## What we should do
+
+* Visualize our data and our predictions
+* Fit lots of models
+* Diagnostics are good, but don't fall in love with them

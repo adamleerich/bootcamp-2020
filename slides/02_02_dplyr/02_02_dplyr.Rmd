@@ -1,0 +1,459 @@
+---
+title: Data Wrangling with `dplyr`
+author: Brian Fannin & Adam Rich
+editor_options:
+  chunk_output_type: console
+title-slide-attributes:
+  data-background-image: "../slide_input/background-sheep.jpg"
+  class: "center"
+---
+
+
+```{r include=FALSE}
+source('common.R')
+```
+
+
+
+
+## Overview
+
+Another element of `tidyverse` developed by Hadley Wickham and many others.
+
+
+
+
+
+## Pipe review: `%>%`
+
+The pipe is probably new to you.
+It takes a little getting used to.
+But once you get the hang of it,
+it is very intuitive.
+
+* It takes whatever is to its **left** and 
+* inserts it as the first argument in the **function to its right**
+
+Shortcut key is `CTRL-SHIFT-M`
+
+
+
+
+## Pipe Example
+
+Let's get some data.
+It's close to Halloween, so how about Bram Stoker's _Dracula_?
+
+```{r eval=FALSE}
+library(tidyverse)
+dracula <- readr::read_file(
+  'http://gutenberg.org/cache/epub/345/pg345.txt')
+dracula_words <- strsplit(dracula, split = '\\s+')
+```
+
+```{r echo=FALSE}
+library(tidyverse)
+dracula <- readr::read_file('dracula.txt')
+dracula_words <- strsplit(dracula, split = '\\s+')
+```
+
+
+
+
+
+## Chain of functions
+
+```{r out.height = "400px"}
+words <- unlist(dracula_words)
+words_lower <- tolower(words)
+nchar_words <- nchar(words_lower)
+nchar_words10 <- pmin(nchar_words, 10)
+table_words10 <- table(nchar_words10)
+barplot(table_words10, names.arg = c(1:9, '10+'))
+```
+
+That's a lot of new variables.
+
+
+
+
+## Combine as one
+```{r eval=FALSE}
+unlist(dracula_words)
+tolower(unlist(dracula_words))
+nchar(tolower(unlist(dracula_words)))
+pmin(nchar(tolower(unlist(dracula_words))), 10)
+table(pmin(nchar(tolower(unlist(dracula_words))), 10))
+
+# Fully nested!
+barplot(table(pmin(nchar(tolower(unlist(dracula_words))), 10)), names.arg = c(1:9, '10+'))
+```
+
+That's hard to read.
+
+
+
+
+## Pipe it!
+```{r out.height = "400px"}
+dracula_words %>% 
+  unlist() %>% 
+  tolower() %>% 
+  nchar() %>% 
+  pmin(10) %>% 
+  table() %>% 
+  barplot(names.arg = c(1:9, '10+'))
+```
+
+
+
+
+
+
+
+## Back to `dplyr`
+
+```{r}
+library(raw)
+data("MultiTri")
+```
+
+```{r eval=FALSE}
+str(MultiTri)
+head(MultiTri)
+```
+
+
+
+
+## Real quick:
+
+* What's the average IBNR for lag 2 by accident year?
+
+
+
+
+## dplyr to the rescue!
+
+
+
+| Verbs             |
+|-------------------|
+| select/rename     |
+| mutate            |
+| group             |
+| arrange           |
+| filter            |
+| summarize         |
+
+
+
+
+## `select` and `rename`
+
+Comparable to the "select" verb in SQL.
+This will return only those columns you've requested.
+A "negative" column name will omit that column.
+
+```{r}
+financials <- MultiTri %>% 
+  dplyr::select(
+    CumulativePaid, CumulativeIncurred, IBNR)
+
+no_lag <- MultiTri %>% 
+  dplyr::select(-Lag)
+```
+
+
+
+
+
+
+## Identifying which columns to select
+
+:::::::::::::: {.columns}
+::: {.column}
+Loads of helper functions to find columns
+
+| function      |
+|---------------|
+| `contains`    |
+| `starts_with` |
+| `ends_with`   |
+| `matches`     |
+| `num_range`   |
+
+:::
+::: {.column}
+
+```{r}
+years <- MultiTri %>% 
+  dplyr::select(contains("year"))
+```
+
+:::
+::::::::::::::
+
+
+
+
+
+
+## `rename`
+
+Closely related to `select`.
+New name on the left, old name on the right.
+(Think the way that variables are usually assigned.)
+
+```{r}
+new_tri <- MultiTri %>% 
+  rename(DevelopmentLag = Lag)
+```
+
+
+
+
+
+## `mutate`
+
+Create a new column or alter an existing one.
+
+```{r}
+new_tri <- new_tri %>% 
+  mutate(
+    PaidToIncurred = CumulativePaid / CumulativeIncurred, 
+    Upper = DevelopmentYear <= 1997)
+```
+
+
+
+
+
+## Aside: a note on assigment
+
+**Re-using variable names invites problems**
+
+The only time I think it is OK is when running the command more than once
+gives you the **exact same results**.
+
+
+
+
+
+## Combining operations
+
+```{r}
+new_tri <- MultiTri %>% 
+  mutate(Upper = DevelopmentYear <= 1997) %>% 
+  dplyr::select(-DevelopmentYear)
+```
+
+
+
+
+
+
+## `arrange`
+
+```{r eval=FALSE}
+MultiTri %>% 
+  arrange(AccidentYear)
+
+MultiTri %>% 
+  arrange(desc(IBNR))
+```
+
+Use the `desc` function to arrange in descending order.
+
+
+
+
+## `filter`
+
+
+```{r}
+upper_tri <- MultiTri %>% 
+  dplyr::filter(DevelopmentYear <= 1997)
+```
+
+Multiple conditions are OK
+
+```{r}
+upper_tri <- MultiTri %>% 
+  dplyr::filter(
+    DevelopmentYear <= 1997, 
+    IBNR > 500)
+```
+
+
+
+
+## `slice`
+
+Like `filter` but does numeric indexing
+to get specific rows of data.
+
+```{r}
+every_fifth <- MultiTri %>%
+  slice(seq(from = 5, by = 5, to = nrow(MultiTri)))
+```
+
+
+
+
+
+## `group_by`
+
+This will group the data. The effect isn't material until another operation is applied.
+
+```{r}
+df_grouped <- MultiTri %>% 
+  group_by(Company, AccidentYear)
+```
+
+
+
+
+
+## `summarize`
+
+```{r}
+dfBigYear <- MultiTri %>% 
+  group_by(AccidentYear) %>% 
+  summarize(BiggestIBNR = max(IBNR))
+```
+
+
+
+
+
+
+## Answer a complex question quickly
+
+For each company
+which has had paid to incurred ratio less than 40%,
+which accident year had the highest P2I?
+
+
+
+
+
+##
+
+```{r}
+dfBigCase <- MultiTri %>% 
+  mutate(PaidToIncurred = CumulativePaid / CumulativeIncurred) %>% 
+  dplyr::filter(PaidToIncurred < 0.4) %>% 
+  group_by(Company) %>% 
+  arrange(desc(PaidToIncurred)) %>% 
+  slice(1) %>% 
+  dplyr::select(Company, AccidentYear)
+```
+
+
+
+
+## What about joining?
+
+```{r}
+dfCo <- data.frame(
+  Company = unique(MultiTri$Company), 
+  stringsAsFactors = FALSE)
+
+dfCo$PolicyHolderSurplus <- rnorm(
+  nrow(dfCo), 1e8, 0.3 * 1e8)
+
+print(dfCo)
+
+```
+
+
+
+
+## Joining
+
+```{r}
+dfJoined <- dplyr::inner_join(MultiTri, dfCo)
+dfJoined %>% 
+  dplyr::select(
+    Company, PolicyHolderSurplus, DevelopmentYear) %>% 
+  head(3)
+```
+
+
+
+
+
+## What's `tidyr`?
+
+Does a number of things, but I'm only going to talk about 2: spreading and gathering
+
+```{r}
+library(tidyr)
+one_co <- new_tri %>% 
+  dplyr::filter(
+    Company == unique(MultiTri$Company)[1], 
+    Line == 'Workers Comp')
+```
+
+
+
+
+
+## `tidyr::spread`
+
+```{r}
+wide_tri <- one_co %>%
+  dplyr::select(AccidentYear, Lag, NetEP, CumulativePaid) %>% 
+  tidyr::spread(Lag, CumulativePaid)
+
+print(wide_tri)
+
+```
+
+
+
+
+## What about missing values?
+
+```{r}
+wide_tri <- one_co %>%
+  dplyr::filter(Upper) %>% 
+  dplyr::select(AccidentYear, Lag, NetEP, CumulativePaid) %>% 
+  spread(Lag, CumulativePaid)
+wide_tri
+```
+
+
+
+## `tidyr::gather`
+
+Note that we're _excluding_ AccidentYear and Net EP from the gathering.
+
+```{r}
+long_tri <- wide_tri %>% 
+  tidyr::gather(Lag, CumulativePaid, -AccidentYear, -NetEP)
+long_tri
+```
+
+
+
+
+
+
+## What's a tibble?
+
+More or less a data frame.
+
+* The print command won't try to print every row in the tibble.
+* They don't automatically convert strings to factors
+* add_row and add_column methods are kinda cool, especially add_row
+* Some other stuff (no partial matching on column names)
+
+
+
+
+## References
+
+* http://www.tidyverse.org/
+* http://dplyr.tidyverse.org/

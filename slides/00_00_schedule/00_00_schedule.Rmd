@@ -1,0 +1,81 @@
+---
+title: "Schedule"
+output: word_document
+---
+
+```{r include = FALSE}
+source('common.R')
+```
+
+## Day one - Lecture 1
+
+| Start        | End      | Duration | What                                                | Who      |
+|-------------:|---------:|:--------:|:----------------------------------------------------|:--------:|
+|  1:00 PM     |  1:15 PM	|  0:15	   | [Introductions](01_01_rstudio_intro.html)           | Both     | 
+|  1:15 PM     |  1:45 PM	|  0:30    | [Getting Started](01_01_rstudio_intro.html#lets-get-started) | Brian    | 
+|  1:45 PM     |  2:30 PM	|  0:45    | [Data Structures](01_02_data_structures_full.html)	 | Adam     | 
+|  2:30 PM     |  3:00 PM	|  0:30    | Break	                                             |          | 
+|  3:00 PM     |  4:00 PM	|  0:60	   | [Data Import/Export](01_03_data_import_export.html) | Brian    | 
+|  4:00 PM     |  4:45 PM	|  0:45	   | [Visualization #1](01_04_visualization_1_full.html) | Adam     | 
+|  4:45 PM     |  5:00 PM	|  0:15	   | Capstone Intro                                      | Capstone | 
+
+## Day two
+
+| Start        | End      | Duration | What                                                | Who      |
+|-------------:|---------:|:--------:|:----------------------------------------------------|:--------:|
+|  1:00 PM     |  1:45 PM	|  	       | Office hours 1                                      | Both     | 
+|  2:00 PM     |  2:45 PM	|  	       | Office hours 2                                      | Both     | 
+|  3:00 PM     |  3:45 PM	|  	       | Office hours 3                                      | Both     | 
+|  4:00 PM     |  4:45 PM	|  	       | Office hours 4                                      | Both     | 
+
+## Day three - Lecture 2
+
+| Start        | End      | Duration | What                                                | Who      |
+|-------------:|---------:|:--------:|:----------------------------------------------------|:--------:|
+|  1:00 PM     |  2:00 PM	|  0:60	   | [Review](02_01_day_one_review.html)                 | Brian    | 
+|  2:00 PM     |  3:00 PM	|  0:60    | [`dplyr`](02_02_TBD.html)                           | Adam     | 
+|  3:00 PM     |  3:30 PM	|  0:30    | Break	                                             | You      | 
+|  3:30 PM     |  4:15 PM	|  0:45	   | [More visualization](02_03_more_visualization.html) | Brian    | 
+|  4:15 PM     |  5:00 PM	|  0:45	   | Tree-based methods                                  | Adam     | 
+
+## Day four - Lecture 3
+
+| Start        | End      | Duration | What                                                | Who      |
+|-------------:|---------:|:--------:|:----------------------------------------------------|:--------:|
+|  1:00 PM     |  1:45 PM	|  0:45	   | Review                                              | Adam     | 
+|  1:45 PM     |  2:45 PM	|  0:60    | [OLS Regression](03_01_regression.html)             | Brian    | 
+|  2:45 PM     |  3:15 PM	|  0:30    | Break	                                             | You      | 
+|  3:15 PM     |  4:15 PM	|  0:60	   | [GLMs](03_03_glms.html)                             | Brian    | 
+|  4:15 PM     |  5:00 PM	|  0:45	   | [More tree-based methods]()                         | Adam     | 
+
+## Day five - Lecture 4
+
+| Start        | End      | Duration | What                                            | Who      |
+|-------------:|---------:|:--------:|:------------------------------------------------|:--------:|
+|  1:00 PM     |  1:45 PM	|  0:45	   | Review                                          | Brian    | 
+|  1:45 PM     |  2:30 PM	|  0:45    | [ChainLadder](04_02_TBD.html)                   | Adam     | 
+|  2:30 PM     |  3:15 PM	|  0:45    | [Distributions and simulation](04_03_distributions_simulation.html) | Brian    | 
+|  3:15 PM     |  3:45 PM	|  0:30    | Break	                                         | You      | 
+|  3:45 PM     |  4:30 PM	|  0:45	   | [RMarkdown](04_04_rmarkdown.html)               | Brian    | 
+|  4:30 PM     |  5:00 PM	|  0:40	   | [Keep learning]()                               | Adam     | 
+
+## Day six
+
+| Start        | End      | Duration | What                                                | Who      |
+|-------------:|---------:|:--------:|:----------------------------------------------------|:--------:|
+|  1:00 PM     |  1:45 PM	|  	       | Office hours 1                                      | Both     | 
+|  2:00 PM     |  2:45 PM	|  	       | Office hours 2                                      | Both     | 
+|  3:00 PM     |  3:45 PM	|  	       | Office hours 3                                      | Both     | 
+|  4:00 PM     |  4:45 PM	|  	       | Office hours 4                                      | Both     | 
+
+## Day seven
+
+| Start        | End      | Duration | What                                                | Who      |
+|-------------:|---------:|:--------:|:----------------------------------------------------|:--------:|
+|  1:00 PM     |  1:45 PM	|  	       | Office hours 1                                      | Both     | 
+|  2:00 PM     |  2:45 PM	|  	       | Office hours 2                                      | Both     | 
+|  3:00 PM     |  3:45 PM	|  	       | Office hours 3                                      | Both     | 
+|  4:00 PM     |  4:45 PM	|  	       | Office hours 4                                      | Both     | 
+
+## Day eight - Lecture 5
+

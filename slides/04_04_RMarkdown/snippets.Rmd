@@ -1,0 +1,30 @@
+
+:::::::::::::: {style="font-size: 0.75em;"}
+
+Field               | Description
+------------------- | ------------------
+GRCODE              | NAIC company code (including insurer groups and single insurers)
+
+::::::::::::::
+
+
+
+
+
+
+:::::::::::::: {.columns}
+::: {.column}
+:::
+::: {.column}
+:::
+::::::::::::::
+
+
+
+
+
+
+## Plot a triangle
+```{r out.height = "450px"}
+plot(tri.inc)
+```

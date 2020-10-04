@@ -1,0 +1,356 @@
+---
+title: R Basics
+editor_options:
+  chunk_output_type: console
+title-slide-attributes:
+  data-background-image: "../slide_input/background-gears.jpg"
+  class: "center"
+---
+
+
+```{r include=FALSE}
+source('common.R')
+```
+
+
+
+
+## Variables
+
+Like in all programming languages, we will use **variable names** to refer
+to the results of calculations or the output of function calls.
+
+### Rules for variable names:
+
+  * Can include letters, numbers, underscores, and dots
+  * Cannot start with a number or underscore
+  * Names can start with a dot, but they will be hidden
+  * R is case-sensitive
+
+
+
+
+## Assigning values to variables
+
+  * You can give any object, value, data, etc. a name.
+  * **Use the `<-` operator** to do so.
+  * You don't have to tell R what kind of data you will store in that name.
+  * And, you can use the name for something else later, if you want.
+  * (Other languages won't allow you to do this)
+
+
+
+
+## Examples
+
+```{r}
+insureds <- c('Hair by Brian', 'Rich Family Farm', 'R Programmers R Us')
+premium <- c(1000, 2000, 3000)
+claim_count <- c(0L, 1L, 0L)
+claim_desc <- c(NA, "Brian gave Adam's goat a bad haircut", NA)
+```
+
+* These are all vectors
+* The `c()` function *concatenates* values into vectors
+* `insureds` is a character vector
+* `premium` is a numeric vector
+* `claim_count` is an integer vector
+* You can use single or double quotes for character strings
+  
+
+
+
+
+## What variables are in use?
+
+How can you tell what variables are already being used?
+
+* `ls()`
+* Type the name at the command line and see what happens!
+    + `num1`
+    + `t`
+    + `df`
+    + `names`
+    + `true`
+  
+
+
+
+## Vector functions
+
+There are 1000s of functions that you can run on vectors.
+Here are a few that you will use all the time,
+on all types of objects.
+
+* Structure: `str`
+* `length`
+* `print`
+* `sum`
+* `mean`
+* `is.na`
+
+
+
+
+## Create a vector using `seq`
+
+The `seq` function is used often to generate a sequence of values.
+The colon operator `:` is a shortcut for a sequence of integers.
+
+```{r }
+pies <- seq(from = 0, by = pi, length.out = 5)
+i <- 1:5
+year <- 2000:2004
+```
+
+
+
+
+## Vector indexing by position
+
+You can pull values out of vectors using **indexing**.
+Remember, ':' is shorthand to generate a sequence.
+
+```{r }
+nums <- 1:100
+nums[20]
+nums[20:30]
+nums[c(10, 20, 30, 40)]
+```
+
+
+
+
+## Vector indexing with logicals
+
+Vectors may be accessed logically.
+This may be done by passing in a logical vector, or a logical expression.
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r }
+i <- 5:9
+i[c(TRUE, FALSE, FALSE, FALSE, TRUE)]
+i[i > 7]
+```
+:::
+::: {.column}
+```{r }
+b <- i > 7
+b
+i[b]
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+
+
+
+## Vector arithmetic
+
+Arithmetic operations on vectors work element-wise.
+If there aren't enough, R will recycle the short ones.
+Like `B0` and `B1` in the following code, they are "scalars".
+
+
+```{r eval=FALSE}
+N <- 10e3
+B0 <- 5
+B1 <- 1.5
+
+e <- rnorm(N, mean = 0, sd = 1)
+X1 <- sample(-10:10, size = N, replace = TRUE)
+
+Y <- B0 + B1 * X1 + e
+```
+
+
+
+
+
+
+## The `%in%` operator
+
+The `%in%` operator will return a logical vector indicating whether or not an element of the first set is contained in the second set.
+
+```{r }
+x <- 1:10
+y <- 5:15
+x %in% y
+```
+
+
+
+
+
+
+## Summarization
+
+Loads of functions take vector input and return scalar output.
+Here are a few more...
+
+```{r eval=FALSE}
+x = 1:50
+sum(x)
+mean(x)
+max(x)
+length(x)
+var(x)
+```
+
+
+
+
+
+
+## Data Frames
+
+A data frame is like a table.
+It can have as many rows and columns as you need.
+Each column is a vector, and all the vectors have the same length.
+
+```{r}
+claims_data <- data.frame(insureds, premium, claim_count, claim_desc)
+print(claims_data)
+```
+
+
+
+## Another data frame
+
+```{r}
+policies <- data.frame(
+  pol_number = 1:10,
+  prem = c(100, 110, 90, 120, 115, 60, 300, 30, 100, 95),
+  age = c(21, 22, 32, 54, 34, 19, 70, 54, 42, NA)
+)
+```
+
+  * Note the differences between this and the last slide
+  * Pay attention to `<-` and `=`
+
+
+
+
+## Functions for data frames
+
+* `str`
+* `names`
+* `print`
+* `head`
+* `summary`
+
+
+
+## Data frame subsetting and indexing
+
+```{r}
+teams  <- c("Toronto", "New York", "Baltimore", "Tampa Bay", "Boston")
+wins   <- c(93, 87, 81, 80, 78)
+losses <- c(69, 75, 81, 82, 84)
+
+alEast <- data.frame(Team = teams, W = wins, L = losses)
+```
+
+
+
+
+
+## Selecting rows and columns
+
+```{r, eval=FALSE}
+alEast[1, ]
+alEast[, 2]
+alEast[, c('W', 'L')]
+alEast[3] 
+alEast[c(T, T, F, F, F), ]
+alEast[alEast$Team == 'New York', ]
+```
+
+What happens on the last one if you leave off the comma?
+
+
+
+
+
+
+
+## Other data structures
+
+Most of the data you will be working with in R will be one of the following
+
++ data.frame
++ vector
++ list
+  
+You will also see some matrices and factors, but let's skip those for now.
+
+
+
+
+## Okay, so what is a list, then?
+
++ A list is a bag of stuff
++ Everything in the list has an index (1, 2, 3, etc.)
++ The stuff can be anything
+  * vectors
+  * other lists
+  * special objects
+  * etc.
++ **Most modeling and other complex functions return lists**
+
+
+
+## Lists
+
+
+```{r }
+x <- list()
+typeof(x)
+x[[1]] <- c("Hello", "there", "this", "is", "a", "list")
+x[[2]] <- c(pi, exp(1))
+summary(x)
+str(x)
+```
+
+
+
+
+## List names
+
+Names are handled with the special `$` operator. `$` permits access to a single element.
+(A single element of a list can be a vector!)
+
+```{r}
+y <- list()
+y$Artist <- c("Lou Reed", "Patti Smith")
+y$Age <- c(45, 63)
+names(y)
+```
+
+
+
+
+
+
+## Exercises
+
+1. Create a vector of strings, you choose the strings and how many
+1. Create another vector of the same length counting by 10s
+1. Read the help page about the `rnorm` function
+1. Build another vector with the same number of random numbers using `rnorm`
+1. Put these three vectors together as a data frame
+1. Run a summary function on the data frame
+    + `str`
+    + `summary`
+    + etc.
+    
+
+
+
+
