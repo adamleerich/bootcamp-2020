@@ -1,0 +1,973 @@
+---
+title: "Ratemaking Capstone"
+author: "Alfred Miu & Alyssa Raciborski"
+output: 
+  revealjs::revealjs_presentation: 
+    theme: sky
+    highlight: zenburn
+    center: true
+    transition: convex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Data Import and Manipulation
+
+## Load Packages & Data Import
+
+```{r, echo=TRUE, results=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lubridate)
+library(tree)
+library(MASS)
+library(raw)
+library(ggplot2)
+library(car)
+library(fitdistrplus)
+library(actuar)
+library(boot)
+library(pscl)
+source("resources.R")
+
+claims <- read_csv("claims.csv")
+pol_dates <- read_csv("pol_dates.csv")
+pol_rating <- read_csv("pol_rating.csv", col_types = "dccc")
+state_lookup <- read_csv('states.csv')
+```
+
+## Basic Tests
+
+Shows that the policy numbers are unique row identifiers in the policy_dates table.
+
+```{r, echo=TRUE}
+duplicated(pol_dates$policy_number) %>%  sum()
+```
+
+Check to ensure all the policy_numbers in the policy_dates table are in the policy_rating table.
+
+```{r, echo=TRUE}
+sum(pol_dates$policy_number %in% pol_rating$policy_number)
+```
+
+---
+
+Store the total number of claims and total ultimate claim amount as variable to use later.
+
+```{r, echo=TRUE, results=FALSE}
+tot_num_clms <- unique(claims$policy_number) %>% length()
+tot_ult_clms <- sum(claims$claim_ultimate)
+```
+
+Check to see if all the policy numbers in the claims table are in the pol_dates table. 
+
+```{r, echo=TRUE}
+sum(unique(claims$policy_number) %in% 
+      pol_dates$policy_number)==tot_num_clms
+```
+
+## Spread pol_rating Table
+
+```{r, echo=TRUE, results=FALSE}
+pol_rating_wide <- pol_rating %>% 
+  dplyr::select(policy_number, variable, value) %>% 
+  tidyr::spread(variable, value)
+```
+
+Convert the employee_count and five_year_claims to integers.  
+Convert revenue to numeric.
+
+```{r, echo=TRUE, results=FALSE}
+pol_rating_wide$employee_count <-
+  as.integer(pol_rating_wide$employee_count)
+pol_rating_wide$five_year_claims <-
+  as.integer(pol_rating_wide$five_year_claims)
+pol_rating_wide$revenue <-
+  as.numeric(pol_rating_wide$revenue)
+```
+
+## Join Tables
+
+- Join pol_rating_wide table to policy_dates table  
+- Join the state_lookup table to the pol_fin table.
+      - Rename Frequency Group to state_freq_grp  
+      - Only add in the state_freq_grp to the pol_final table  
+          - Did **not** add "Population"
+
+```{r, echo=TRUE, results=FALSE, message=FALSE, warning=FALSE}
+pol_fin <- pol_dates %>% 
+  dplyr::select(policy_number, inception, expiration) %>% 
+  dplyr::inner_join(pol_rating_wide)
+```
+
+---
+
+```{r, echo=TRUE, results=FALSE, message=FALSE, warning=FALSE}
+statehelper <- state_lookup %>%
+  dplyr::rename("state_freq_grp" = "Frequency Group")
+statehelper2 <- statehelper %>% 
+  dplyr::select(State, state_freq_grp)
+pol_final <- pol_fin %>% 
+  inner_join(statehelper2, by = c("state" = "State"))
+```
+
+## Add Policy Characteristics to Claims Table
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+clms_final <- claims %>% 
+  dplyr::select(claim_number, policy_number, claim_ultimate) %>% 
+  dplyr::inner_join(pol_final)
+```
+
+## Aggeregate Claims by Policy  
+    
+- Create table that aggregates claims by policy  
+- Join that table with the pol_final table  
+- Replace null values  
+
+```{r, echo=TRUE, results=FALSE, message=FALSE, warning=FALSE}
+agg_clm <- claims %>% 
+  group_by(policy_number) %>% 
+  summarize(total_ultimate = sum(claim_ultimate),
+            claim_count = n())
+poltbl <- pol_final %>% 
+  left_join(agg_clm) %>% 
+  replace_na(list(total_ultimate = 0, claim_count = 0))
+```
+
+## Add in Derived Columns
+
+- yrs_in_bus to poltbl and clms_final tables  
+- avg_sev to poltbl table  
+
+```{r, echo=TRUE, results=FALSE}
+poltbl$yrs_in_bus <-
+  (year(as.Date(paste0(as.character(poltbl$inception), '01'), 
+               format='%Y%m%d'))
+   - as.integer(poltbl$year_started) + 1)
+
+clms_final$yrs_in_bus <-
+  (year(as.Date(paste0(as.character(clms_final$inception), '01'), 
+               format='%Y%m%d'))  
+   - as.integer(clms_final$year_started) + 1)
+
+poltbl$avg_sev <- ifelse(poltbl$claim_count ==0,
+                         0,
+                         poltbl$total_ultimate / poltbl$claim_count)
+```
+
+## Cancel/Void Policy Check
+
+Shows that all policies lasted to term (1 year) and there were no cancellations or voids.
+
+```{r, echo=TRUE}
+poltbl$pol_term <- 
+  diff_yyyymm(poltbl$inception, poltbl$expiration)/12
+1 == unique(poltbl$pol_term)
+```
+
+## Sanity Checks
+
+Check if the sum of claims_count in new table matches source data.
+
+```{r, echo=TRUE}
+sum(poltbl$claim_count)==nrow(claims)
+```
+
+---
+
+Check if the sum of total_ultimate in new table matches source data. Also checks the avg_sev column.  
+
+```{r, echo=TRUE}
+sum(poltbl$total_ultimate)==tot_ult_clms
+tot_ult_clms==sum(poltbl$avg_sev*poltbl$claim_count)
+```
+
+---
+
+Check to make sure the policies are all included and no duplicates were made.
+
+```{r, echo=TRUE}
+nrow(poltbl)==length(unique(poltbl$policy_number))
+nrow(poltbl)==length(unique(pol_dates$policy_number))
+```
+
+```{r, echo=FALSE, results=FALSE}
+rm(agg_clm, claims, pol_dates, pol_fin, pol_final, pol_rating, pol_rating_wide, state_lookup, statehelper, statehelper2)
+```
+
+# Exploratory Data Analysis
+
+## Variable: Revenue
+
+```{r, echo=TRUE, results=TRUE}
+summary(poltbl$revenue)
+```
+
+Histogram
+
+```{r, echo=TRUE, results=FALSE}
+revhist <- ggplot(data = poltbl) + 
+  aes(revenue) + 
+  geom_histogram()
+```
+
+## Revenue Histogram
+
+```{r, echo=FALSE, results=TRUE, message=FALSE}
+revhist
+```
+
+## Revenue Descision Tree
+
+```{r, echo=TRUE, message=FALSE, results=FALSE}
+pol_tree <- poltbl %>% 
+  mutate(has_claims = (claim_count > 0)) %>% 
+  dplyr::select(
+    has_claims, discipline,
+    employee_count, five_year_claims,
+    revenue, state_freq_grp, yrs_in_bus,
+    claim_count) %>% 
+  mutate(
+    has_claims = as.integer(has_claims),
+    discipline = as.factor(discipline),
+    state_group = as.factor(state_freq_grp),
+    years_in_business = as.integer(yrs_in_bus))
+tpol <- tree(
+  formula = claim_count ~ revenue + discipline + state_group,
+  data = pol_tree)
+jpeg(file="rev_tree.jpeg")
+plot(tpol, type='uniform')
+text(tpol, pretty=5, col='blue', cex=0.8)
+dev.off()
+```
+
+## Revenue Decision Tree
+
+<style>
+.container{
+    display: flex;
+}
+.col{
+    flex: 1;
+    align-self: center;
+}
+</style>
+
+<div class="container">
+
+<div class="col">
+![](https://media.giphy.com/media/VjrcYO72iu4lG/giphy.gif)
+</div>
+
+<div class="col">
+![](rev_tree.jpeg)
+</div>
+
+</div>
+
+## Revenue Scatter Plot
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+rev1 <- pol_tree %>% 
+  mutate(rev_band=round(revenue/10e3, 0)) %>% 
+  group_by(rev_band) %>% 
+  summarize(avg_claim_count =
+              mean(claim_count)) %>% 
+  ggplot() +
+  aes(rev_band, avg_claim_count) +
+  geom_point()
+```
+
+## Revenue Scatter Plot
+
+```{r, echo=FALSE, results=TRUE}
+rev1
+```
+
+## Variable: Discipline
+
+Bar Chart
+
+```{r, echo=TRUE, plot=FALSE, result=FALSE, message=FALSE}
+countsdis <- table(clms_final$discipline)
+#barplot(countsdis, main="Claim Counts by Discipline", 
+#    xlab="Discipline")
+```
+  
+## Discipline Bar Chart
+
+```{r, echo=FALSE, results=TRUE}
+barplot(countsdis, main="Claim Counts by Discipline", xlab="Discipline")
+```
+
+## Discipline and Severity
+
+```{r, echo=FALSE, results=FALSE, message=FALSE}
+d_tbl <- clms_final %>% 
+  group_by(discipline) %>% 
+  summarize(total_ultimate = sum(claim_ultimate),
+            claim_count = n())
+d_exp <- poltbl %>% 
+  group_by(discipline) %>% 
+  summarize(policies = n())
+d <- d_tbl %>% 
+  inner_join(d_exp)
+d$ult_exp <- d$total_ultimate/d$claim_count
+d1 <- d %>% 
+  dplyr::select(discipline, claim_count, 
+                total_ultimate, ult_exp)
+```
+
+```{r, echo=FALSE, results=TRUE}
+d2 <- d1 %>% 
+  mutate(claim_count=round(claim_count, 0)) %>% 
+  mutate(total_ultimate=round(total_ultimate, 0)) %>% 
+  mutate(claim_count=format(claim_count, big.mark=",")) %>% 
+  mutate(total_ultimate=format(total_ultimate, big.mark=",")) %>% 
+  mutate(ult_exp=round(ult_exp, 0)) %>% 
+  mutate(ult_exp=format(ult_exp, big.mark=","))
+d2 %>% 
+  knitr::kable(align="lrrr")
+```
+
+## Variable: Employee Count
+
+```{r, echo=TRUE, results=TRUE}
+summary(poltbl$employee_count)
+```
+
+Histogram
+
+```{r, echo=TRUE, results=FALSE}
+echist <- ggplot(data = poltbl) + 
+  aes(employee_count) + 
+  geom_histogram()
+```
+
+## Employee Count Histogram
+
+```{r, echo=FALSE, results=TRUE, message=FALSE}
+echist
+```
+
+## Employee Count Decision Tree
+
+```{r, echo=TRUE, results=FALSE}
+tpol2 <- tree(
+  formula = claim_count ~ employee_count + discipline + state_group,
+  data = pol_tree)
+```
+
+## Employee Count Decision Tree
+
+```{r, echo=FALSE, results=TRUE}
+plot(tpol2, type='uniform')
+text(tpol2, pretty=5, col='blue', cex=0.8)
+```
+
+## Employee Count Scatter Plot
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+p2 <- pol_tree %>%
+  group_by(employee_count) %>% 
+  summarize(avg_claim_count =
+              mean(claim_count)) %>% 
+  ggplot() +
+  aes(employee_count, avg_claim_count) +
+  geom_point()
+```
+
+## Employee Count Scatter Plot
+
+```{r, echo=FALSE, results=TRUE, fig.height=5, fig.width=6}
+p2
+```
+
+## Employee Count and Revenue
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+ec_rev <- pol_tree %>%
+  group_by(employee_count) %>% 
+  summarize(avg_rev =
+              mean(revenue)) %>% 
+  ggplot() +
+  aes(employee_count, avg_rev) +
+  geom_point()
+```
+
+## Employee Count and Revenue Scatter Plot
+
+```{r, echo=FALSE, results=TRUE, fig.height=5, fig.width=6}
+ec_rev
+```
+
+## Variable: Five Year Claims
+
+```{r, echo=TRUE, results=TRUE}
+summary(poltbl$five_year_claims)
+```
+
+Histogram
+
+```{r, echo=TRUE, results=FALSE}
+fychist <- ggplot(data = poltbl) + 
+  aes(five_year_claims) + 
+  geom_histogram()
+```
+
+## Five Year Claims Histogram
+
+```{r, echo=FALSE, results=TRUE, message=FALSE}
+fychist
+```
+
+## Five Year Claims Decision Tree
+
+```{r, echo=TRUE, results=FALSE}
+tpol3 <- tree(
+  formula = claim_count ~ five_year_claims + discipline + state_group,
+  data = pol_tree)
+```
+
+## Five Year Claims Decision Tree
+
+```{r, echo=FALSE, results=TRUE}
+plot(tpol3, type='uniform')
+text(tpol3, pretty=5, col='blue', cex=0.8)
+```
+
+## Five Year Claims Scatter Plot
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+p3 <- pol_tree %>%
+  group_by(five_year_claims) %>% 
+  summarize(avg_claim_count =
+              mean(claim_count)) %>% 
+  ggplot() +
+  aes(five_year_claims, avg_claim_count) +
+  geom_point()
+```
+
+## Five Year Claims Scatter Plot
+
+```{r, echo=FALSE, results=TRUE}
+p3
+```
+
+## Variable: Years in Business
+
+```{r, echo=TRUE, results=TRUE}
+summary(poltbl$yrs_in_bus)
+```
+
+```{r, echo=FALSE, results=FALSE, message=FALSE}
+yrs_bus_tbl <- clms_final %>% 
+  group_by(yrs_in_bus) %>% 
+  summarize(total_ultimate = sum(claim_ultimate),
+            claim_count = n())
+yrs_bus_exp <- poltbl %>% 
+  group_by(yrs_in_bus) %>% 
+  summarize(policies = n())
+yrs_bus <- yrs_bus_tbl %>% 
+  inner_join(yrs_bus_exp)
+yb <- yrs_bus %>% 
+  dplyr::select(yrs_in_bus, policies, total_ultimate, claim_count) %>% 
+  mutate(policies=format(policies, big.mark=",")) %>% 
+  mutate(total_ultimate=format(total_ultimate, big.mark=","))
+```
+
+## Years in Business Loss Analysis (1-7)
+
+```{r, echo=FALSE, results=TRUE}
+yb3 <- knitr::kable(yb[1:7,],align="lrrr", )
+yb3
+```
+
+## Years in Business Loss Analysis (8-14)
+
+```{r, echo=FALSE, results=TRUE}
+yb4 <- knitr::kable(yb[8:14,],align="lrrr", )
+yb4
+```
+
+## Years in Business Loss Analysis (15-21)
+
+```{r, echo=FALSE, results=TRUE}
+yb5 <- knitr::kable(yb[15:21,],align="lrrr", )
+yb5
+```
+
+## Years in Business Scatter Plot
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+p4 <- pol_tree %>%
+  group_by(yrs_in_bus) %>% 
+  summarize(avg_claim_count =
+              mean(claim_count)) %>% 
+  ggplot() +
+  aes(yrs_in_bus, avg_claim_count) +
+  geom_point()
+```
+
+## Years in Business Scatter Plot
+
+```{r, echo=FALSE, results=TRUE}
+p4
+```
+
+## Variable: Frequency Group
+
+Bar Chart
+
+```{r, echo=TRUE, plot=FALSE}
+countsdis <- table(clms_final$state_freq_grp)
+#barplot(countsdis, main="Claim Counts by Frequency Group", 
+# xlab="Frequency Group")
+```
+  
+## Frequency Group Bar Chart
+
+```{r, echo=FALSE, results=TRUE}
+barplot(countsdis, main="Claim Counts by Frequency Group", xlab="Frequency Group")
+```
+
+## Frequency Group and Severity
+
+```{r, echo=FALSE, results=FALSE, message=FALSE}
+fg_tbl <- clms_final %>% 
+  group_by(state_freq_grp) %>% 
+  summarize(total_ultimate = sum(claim_ultimate),
+            claim_count = n())
+fg_exp <- poltbl %>% 
+  group_by(state_freq_grp) %>% 
+  summarize(policies = n())
+fg <- fg_tbl %>% 
+  inner_join(fg_exp)
+fg$ult_exp <- fg$total_ultimate/fg$claim_count
+fg1 <- fg %>% 
+  dplyr::select(state_freq_grp, claim_count, 
+                total_ultimate, ult_exp)
+```
+
+```{r, echo=FALSE, results=TRUE}
+fg2 <- fg1 %>% 
+  mutate(claim_count=round(claim_count, 0)) %>% 
+  mutate(total_ultimate=round(total_ultimate, 0)) %>% 
+  mutate(claim_count=format(claim_count, big.mark=",")) %>% 
+  mutate(total_ultimate=format(total_ultimate, big.mark=",")) %>% 
+  mutate(ult_exp=round(ult_exp, 0)) %>% 
+  mutate(ult_exp=format(ult_exp, big.mark=","))
+fg2 %>% 
+  knitr::kable(align="lrrr")
+```
+
+## Variable: Use Written Contracts
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+wc_tbl <- clms_final %>% 
+  group_by(use_written_contracts) %>% 
+  summarize(total_ultimate = sum(claim_ultimate),
+            claim_count = n())
+wc_exp <- poltbl %>% 
+  group_by(use_written_contracts) %>% 
+  summarize(policies = n())
+wc <- wc_tbl %>% 
+  inner_join(wc_exp)
+```
+
+## Use Written Contracts
+
+```{r, echo=TRUE, results=FALSE}
+wc$clmct_exp <- wc$claim_count/wc$policies
+wc$ult_exp <- wc$total_ultimate/wc$policies
+wc1 <- wc %>% 
+  dplyr::select(use_written_contracts, policies, claim_count, 
+                total_ultimate)
+wc2 <- wc %>% 
+  dplyr::select(use_written_contracts, policies, clmct_exp, ult_exp)
+
+```
+
+## Use Written Contracts Loss Analysis
+
+```{r, echo=FALSE, results=TRUE}
+wc4 <- wc1 %>% 
+  mutate(policies=round(policies, 0)) %>% 
+  mutate(claim_count=round(claim_count, 0)) %>% 
+  mutate(total_ultimate=round(total_ultimate, 0)) %>% 
+  mutate(policies=format(policies, big.mark=",")) %>% 
+  mutate(total_ultimate=format(total_ultimate, big.mark=",")) %>% 
+  mutate(claim_count=format(claim_count, big.mark=","))
+wc4 %>% 
+  knitr::kable(align="lrrr")
+```
+
+      
+
+```{r, echo=FALSE, results=TRUE}
+wc3 <- wc2 %>% 
+  mutate(policies=round(policies, 0)) %>% 
+  mutate(clmct_exp=round(clmct_exp, digits=3)) %>% 
+  mutate(ult_exp=round(ult_exp, 0)) %>% 
+  mutate(policies=format(policies, big.mark=",")) %>% 
+  mutate(ult_exp=formatC(ult_exp, big.mark=","))
+wc3 %>% 
+  knitr::kable(align="lrrr")
+```
+
+## Use of Written Contracts Bar Chart
+
+```{r, echo=TRUE, plot=FALSE}
+countsdis <- table(clms_final$use_written_contracts)
+#barplot(countsdis, main="Claim Counts by Written Contracts", 
+# xlab="Use Written Contracts")
+```
+  
+## Use of Written Contracts Bar Chart
+
+```{r, echo=FALSE, results=TRUE, fig.height=5, fig.width=6}
+barplot(countsdis, main="Claim Counts by Written Contracts", xlab="Use Written Contracts")
+```
+
+```{r, echo=FALSE, results=FALSE}
+poltbl$pol_term <-
+  diff_yyyymm(poltbl$inception, poltbl$expiration) / 12
+poltbl$exposure <- poltbl$employee_count * poltbl$pol_term
+```
+
+# Generalized Linear Model
+
+---
+
+Create table with claim count and relevant variables for the model.
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+pol_model <- poltbl %>%
+  mutate(
+    has_claims = (claim_count > 0),
+    revenue_large = (revenue >= 4e6),
+  ) %>% 
+  dplyr::select(
+    discipline,
+    employee_count,
+    use_written_contracts,
+    five_year_claims,
+    revenue,
+    state_freq_grp,
+    exposure,
+    yrs_in_bus,
+    has_claims,
+    revenue_large,
+    claim_count
+  ) %>%
+  mutate(
+    has_claims = as.factor(has_claims),
+    revenue_large = as.factor(revenue_large),
+    discipline = as.factor(discipline),
+    state_freq_grp = as.factor(state_freq_grp),
+    use_written_contracts = as.factor(use_written_contracts)
+  )
+```
+
+---
+
+```{r, echo=TRUE, results=TRUE, message=FALSE}
+summary(pol_model)
+```
+
+## Set Base for Categorical Variables
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+pol_model <- pol_model %>%
+  mutate(
+    discipline = relevel(discipline, ref = "Architect"),
+    state_freq_grp = relevel(state_freq_grp, ref = "Low"),
+    use_written_contracts = relevel(use_written_contracts, ref = 'Y')
+  )
+```
+
+---
+
+```{r, echo=TRUE, results=TRUE, message=FALSE}
+summary(pol_model)
+```
+
+---
+
+```{r, echo=TRUE, results=TRUE, message=FALSE}
+str(pol_model)
+```
+
+## GLM Test 1a
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+freq_model1a <-
+  glm(
+    claim_count ~ discipline + use_written_contracts + five_year_claims + revenue +
+      state_freq_grp + yrs_in_bus,
+    offset = log(exposure),
+    family = poisson,
+    data = pol_model
+  )
+```
+
+---
+
+```{r, echo=FALSE, results=TRUE}
+summary(freq_model1a)
+```
+
+## GLM Test 1b
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+freq_model1b <-
+  glm(
+    claim_count ~ discipline + employee_count + use_written_contracts + five_year_claims +
+      state_freq_grp + yrs_in_bus,
+    offset = log(revenue),
+    family = poisson,
+    data = pol_model
+  )
+```
+
+---
+
+```{r, echo=FALSE, results=TRUE}
+summary(freq_model1b)
+```
+
+## GLM 1a v. 1b
+
+```{r, echo=TRUE, results=TRUE}
+AIC(freq_model1a)
+AIC(freq_model1b)
+```
+
+Revenue appears to be a better offset.
+
+
+## Lowest AIC Model
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+freq_model2 <-
+  glm(
+    claim_count ~ discipline + state_freq_grp + revenue_large,
+    offset=log(revenue),
+    family = poisson,
+    data = pol_model
+  )
+```
+
+---
+
+```{r, echo=TRUE, results=TRUE, message=FALSE}
+summary(freq_model2)
+```
+
+---
+
+```{r, echo=TRUE, results=TRUE, message=FALSE}
+AIC(freq_model2)
+```
+
+## Diagnostics
+
+No collinearity issue.
+```{r, echo=TRUE, results=TRUE, message=FALSE}
+vif(freq_model2)
+```
+
+---
+
+Pattern - curvature
+
+```{r, echo=TRUE, results=TRUE, message=FALSE, fig.height=5, fig.width=6}
+plot(residuals(freq_model2) ~ predict(freq_model2))
+```
+
+## q-q Plot
+
+```{r, echo=FALSE, results=FALSE, message=FALSE}
+qqnorm(residuals(freq_model2))
+abline(0,1)
+```
+
+# Severity
+
+## Test Variables with GLM
+
+Selected variables for the model.
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+claims_model <- clms_final %>%
+  dplyr::select(
+    discipline,
+    employee_count,
+    use_written_contracts,
+    five_year_claims,
+    revenue,
+    state_freq_grp,
+    yrs_in_bus,
+    claim_ultimate
+  ) %>%
+  mutate(
+    discipline = relevel(as.factor(discipline), ref = "Architect"),
+    state_freq_grp = relevel(as.factor(state_freq_grp), ref = "Low"),
+    use_written_contracts = relevel(as.factor(use_written_contracts), ref = 'Y')
+  )
+```
+
+## Severity GLM
+
+```{r, echo=TRUE, results=FALSE, message=FALSE}
+sev_model1 <-
+  glm(
+    claim_ultimate ~ discipline + employee_count + use_written_contracts + five_year_claims + revenue +
+      state_freq_grp + yrs_in_bus,
+    family = Gamma(),
+    data = claims_model
+  )
+```
+
+---
+
+Input has little predicting power.
+
+```{r, echo=FALSE, results=TRUE, message=FALSE}
+summary(sev_model1)
+```
+
+
+## Fit Distributions
+
+Fit lognormal and Weibull distributions to the ultimate claim amount.
+Gamma needed to be scaled and ended up not being the best fit, so it is not included.
+
+```{r, echo=TRUE, results=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+clms_final$log_clm_ult <- log(clms_final$claim_ultimate)
+sim <- 15010
+
+fitGamma <- fitdistr(clms_final$log_clm_ult, "gamma")
+fitLognormal <- fitdistr(clms_final$log_clm_ult, "lognormal")
+fitWeibull <- fitdistr(clms_final$log_clm_ult, "Weibull")
+
+fitLognormal
+fitWeibull
+fitGamma
+```
+
+## q-q Plot
+
+```{r, echo=TRUE, results=FALSE}
+probabilities = seq_len(sim)/(sim + 1)
+
+GammaQ <- qgamma(probabilities, coef(fitGamma)[1], coef(fitGamma)[2])
+weibullQ <- qweibull(probabilities, coef(fitWeibull)[1], coef(fitWeibull)[2])
+lnQ <- qlnorm(probabilities, coef(fitLognormal)[1], coef(fitLognormal)[2])
+
+sampleLogMean <- fitLognormal$estimate[1]
+sampleLogSd <- fitLognormal$estimate[2]
+
+sampleShapeW <- fitWeibull$estimate[1]
+sampleScaleW <- fitWeibull$estimate[2]
+
+sampleShapeG <- fitGamma$estimate[1]
+sampleScaleG <- fitGamma$estimate[2]
+
+
+sortedSeverity <- sort(clms_final$log_clm_ult)
+oldPar <- par(mfrow = c(1,3))
+```
+
+## Weibull q-q Plot
+
+```{r, echo=FALSE, results=TRUE}
+plot(sort(weibullQ), sortedSeverity, xlab = 'Theoretical Quantiles', ylab = 'Sample Quantiles', pch=19, main = "Weibull Fit")
+abline(0,1)
+```
+
+## Lognormal q-q Plot
+
+```{r, echo=FALSE, results=TRUE}
+plot(sort(lnQ), sortedSeverity, xlab = 'Theoretical Quantiles', ylab = 'Sample Quantiles', pch=19, main = "Lognormal Fit")
+abline(0,1)
+```
+
+## Gamma q-q Plot
+
+```{r, echo=FALSE, results=TRUE}
+plot(sort(GammaQ), sortedSeverity, xlab = 'Theoretical Quantiles', ylab = 'Sample Quantiles', pch=19, main = "Gamma Fit")
+abline(0,1)
+```
+
+## Compare Fit to Histogram
+
+```{r, echo=TRUE, results=FALSE}
+x <- seq(0, max(clms_final$log_clm_ult), length.out=500)
+yLN <- dlnorm(x, sampleLogMean, sampleLogSd)
+yWeibull <- dweibull(x, sampleShapeW, sampleScaleW)
+yGamma <- dgamma(x, sampleShapeG, sampleScaleG)
+```
+
+## Histogram
+
+<style>
+.container{
+    display: flex;
+}
+.col{
+    flex: 1;
+    align-self: center;
+}
+</style>
+
+<div class="container">
+
+<div class="col">
+<p style="color:red">Gamma</p>
+<p style="color:blue">Lognormal</p>
+<p style="color:green">Weibull</p>
+</div>
+
+<div class="col">
+
+</div>
+```{r, echo=FALSE, results=TRUE}
+hist((clms_final$log_clm_ult), freq=FALSE, ylim=range(yLN, yGamma))
+lines(x, yGamma, col="red")
+lines(x, yLN, col="blue")
+lines(x, yWeibull, col="green")
+```
+</div>
+
+
+
+## Kolmogorov-Smirnov
+
+```{r, echo=TRUE, results=FALSE}
+sampleCumul <- seq(1, length(clms_final$log_clm_ult)) / length(clms_final$log_clm_ult)
+stepSample  <- stepfun(sortedSeverity, c(0, sampleCumul), f = 0)
+yWeibull <- pweibull(sortedSeverity, sampleShapeW, sampleScaleW)
+yLN <- plnorm(sortedSeverity, sampleLogMean, sampleLogSd)
+yGamma <- pgamma(sortedSeverity, sampleShapeG, sampleScaleG)
+
+testGamma <- ks.test(clms_final$log_clm_ult, "pgamma", sampleShapeG, sampleScaleG)
+testLN <- ks.test(clms_final$log_clm_ult, "plnorm", sampleLogMean, sampleLogSd)
+testWeibull <- ks.test(clms_final$log_clm_ult, "pweibull", sampleShapeW, sampleScaleW)
+```
+
+## Restults
+
+```{r, echo=TRUE, results=TRUE}
+testGamma
+testLN
+testWeibull
+```
+
+## Conclusion
+
+Gamma is the best fit for severity.
+
+# ![](https://media.giphy.com/media/8JW82ndaYfmNoYAekM/giphy.gif)
