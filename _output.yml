@@ -1,0 +1,6 @@
+revealjs::revealjs_presentation:
+  center: no
+  self_contained: yes
+  transition: slide
+  css: css/reveal_opts.css
+  pandoc_args: [ "--resource-path", "../"    ]
