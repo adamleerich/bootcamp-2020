@@ -5,3 +5,6 @@
 
 # slide_output/*.html
 *.csv
+
+
+slides/99_01_beginners/epl.Rdata
