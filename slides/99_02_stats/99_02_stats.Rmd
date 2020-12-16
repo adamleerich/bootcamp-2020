@@ -1,0 +1,805 @@
+---
+title: Data Analysis in R
+editor_options:
+  chunk_output_type: console
+title-slide-attributes:
+  data-background-image: "window-484596_1920.jpg"
+  class: "center"
+---
+
+
+```{r include=FALSE}
+source('../../common.R')
+```
+
+
+
+## Data Prep
+
+* I recommended doing *complicated data cleaning in Excel*
+* Save as CSV
+* Then load to R
+* Separate data prep and analysis stages if possible
+* Save intermediate data as RDS files
+
+```{r}
+library(tidyverse)
+mb2276 <- readr::read_rds('mb2276.rds')
+```
+
+
+
+
+## Quick Note about File Types
+
+* CSV
+    + For transfer between XL, R, etc.
+    + Use the `readr` package to make reading CSV's more robust
+    
+* RData
+    + Save multiple objects at once
+    + However, can get messy when reloading using `load()`
+    
+* RDS
+    + Save one object at a time
+    + Does not attach to environment when you load
+    
+
+
+
+## Summarize Data
+
+```{r}
+summary(mb2276)
+```
+
+
+
+
+
+
+## Tabular Summary
+
+```{r echo=TRUE, results='asis'}
+library(alrtools)
+library(knitr)
+mb2276 %>% info %>% 
+  select(-levels, -median, -q25, -q75, -unique_values) %>% 
+  head %>% 
+  knitr::kable()
+```
+
+
+
+
+
+
+## Univariate distributions
+
+```{r}
+mb_tall <- mb2276 %>% 
+  pivot_longer(
+    names_to = 'measure',
+    values_to = 'value',
+    values_drop_na = TRUE,
+    cols = -c(wins))
+
+mb_tall %>% 
+  ggplot() +
+  aes(x = value) +
+  facet_wrap(~measure, scales = 'free') + 
+  geom_histogram()
+```
+
+
+
+
+## Potential outliers
+
+
+The following graphs are very highly skewed to the left
+and have potential outliers:
+
+* `strikeouts_thrown`
+* `errors`
+* `hits_allowed`
+* `walks_allowed`
+
+
+
+
+### `strikeouts_thrown`
+
+I don't know for sure what natural maximums would be 
+to the columns with potential outliers.
+But, it seems some observations have been incorrectly coded.
+For example, here are the top six values
+of the `strikeouts_thrown` variable:
+
+```{r}
+
+# ============================
+# Potential Outliers
+# ============================
+
+# Understand extreme values: strikeouts
+sto <- sort(mb2276$strikeouts_thrown, decreasing = TRUE)
+head(sto)
+```
+
+If a team threw a perfect game with no overtime innings,
+they could throw a maximum of 27 strikeouts per game.
+If they did that for every game, that would be 4374
+strikeouts in one season.  Of course, games could have overtime
+which could bring that 27 up, but it is unbelievable that the top
+two values for this column could be correct, 
+even the third and fourth highest stretch credulity.
+
+
+### `errors`
+
+```{r}
+# Understand extreme values: errors
+# No extreme growth like with strikeouts
+eo <- sort(mb2276$errors, decreasing = TRUE)
+head(eo)
+hist(eo[eo > 700], main = "Histogram of errors over 700")
+```
+
+However, `errors` does not show a similar type of jump.
+The maximum of 1898, while awful, is not impossible in a season.
+
+
+
+### `hits_allowed`
+
+
+```{r}
+# Understand extreme values: hits_allowed
+hao <- sort(mb2276$hits_allowed, decreasing = TRUE)
+head(hao)
+sum(hao > 1783)
+```
+
+The distribution of `base_hits` should look similar to the 
+distribution of `hits_allowed`.
+
+```{r}
+# Density plot comparing base_hits and hits_allowed
+mb_tall %>% 
+  filter(measure %in% c('base_hits', 'hits_allowed')) %>% 
+  filter(value < 5000) %>% 
+  ggplot(.) + 
+  aes(x = value, color = measure, linetype = measure) +
+  geom_density(size = 2) +
+  scale_x_log10() +
+  labs(title = "Compare Distributions: base_hits and hits_allowed")
+```
+
+According to 
+https://www.baseball-almanac.com/recbooks/hits_records_mlb_teams.shtml,
+the record for hits by one team in a season is 1783.
+Our data has a maximum for `base_hits` of 2554, which could be valid
+if it is from a year that was scaled up because it had fewer than 162 games.
+
+The max value of `hits_allowed` is over 30,000.  That is most definitely
+a data entry or collection error.  There are 41 records with 
+`hits_allowed` over 5000 (2 x max of base hits), 
+which I am selecting as an arbitrary cutoff for `hits_allowed` outliers.
+
+
+
+
+
+
+
+### `walks_allowed`
+
+Walks allowed is skewed, but the numbers look possible.
+
+```{r}
+# Understand extreme values: walks_allowed
+wao <- sort(mb2276$walks_allowed, decreasing = TRUE)
+head(wao)
+head(wao[-length(wao)] / wao[-1] - 1, 10)
+```
+
+
+
+
+
+
+## Bivariate distributions with `wins`
+
+```{r}
+
+# ============================
+# Bivariate distributions with `wins`
+# ============================
+
+
+
+mb_tall %>% 
+  ggplot() +
+  aes(x = value, y = wins) +
+  facet_wrap(~measure, scales = 'free') + 
+  geom_point() + 
+  geom_smooth(se = FALSE, method = 'lm')
+```
+
+
+
+
+
+## Correlations between columns
+
+```{r}
+
+# ============================
+# Correlations between columns
+# ============================
+
+GGally::ggcorr(
+  data = mb2276[, -1], 
+  method = c("pairwise.complete.obs", "pearson"),
+  nbreaks = 5,
+  palette = 'RdBu')
+```
+
+It is interesting that `homeruns` and `homeruns_allowed` have 
+postitive correlation.  At times, the MLB has changed the
+rules of baseball to make homeruns easier or harder.  It could be that this
+correlation is caused by all teams being affected by rule changes
+in a fair way.
+
+
+
+
+
+## Credibility of zeros
+
+The likelihood that over a 162-game season that anything could
+"never" happen is so low that it makes the `zero_count` above
+seem unlikely.
+
+Take, for example, the one record with zero `wins`.
+According to
+https://en.wikipedia.org/wiki/List_of_worst_Major_League_Baseball_season_records
+the lowest number of wins in a season has never been zero.
+Of course, Wikipedia is not a perfect source for data.
+However, this gives me enough reason to question the zero in 
+`wins` column and possibly every other column with zeros.
+In a season of 162 games, no team will be perfectly awful or perfectly good.
+
+
+```{r}
+
+# ============================
+# Credibility of zeros
+# ============================
+
+# What records have zeros in stolen_base?  triples?
+# i.e., the columns with exactly two zeros
+which(mb2276$stolen_base == 0)
+which(mb2276$triples == 0)
+```
+
+
+
+## Missing data points
+
+### Hit by pitch or `free_base`
+
+Nearly all `free_base` values are `NA`.  According to
+https://www.si.com/mlb/video/2020/08/11/batters-hit-by-pitches-2020,
+the hit-by-pitch rate was about 0.5 per game in 1996.
+I might expect an average value of around 80 for this column,
+my initial reaction to replace `NA`s with zero is not appropriate.
+Given the high number of `NA`s, it will be best to drop this column.
+
+
+
+### `caught_stealing`
+
+One third of the values in this column are `NA`.
+But, as seen above in the correlation matrix,
+and below in the scatterplot, `caught_stealing` and `stolen_base`
+have positive correlation.
+
+```{r}
+# caught_stealing versus stolen_base
+mb2276 %>% 
+  filter(!is.na(caught_stealing) & !is.na(stolen_base)) %>% 
+ggplot() +
+  aes(x = stolen_base, y = caught_stealing) +
+  geom_point() +
+  geom_smooth()
+```
+
+
+
+## Base Hits
+
+The column `base_hits` should be a sum of 
+
+* singles (not included)
+* `doubles`
+* `triples`
+* `homeruns`
+
+```{r}
+
+# ============================
+# Base Hits
+# ============================
+
+lm_bh <- lm(
+  wins ~ base_hits + homeruns + triples + 
+    doubles + walks + stolen_base, data = mb2276)
+summary(lm_bh)
+anova(lm_bh)
+prcomp(mb2276[, c('base_hits', 'doubles', 'triples', 'homeruns')])
+```
+
+It includes information that overlaps with the others.
+I'll need to keep this in mind when looking at potential models.
+
+
+\pagebreak
+
+
+# Data Preparation
+
+## Selecting Columns
+
+Using the above information,
+I'm selecting columns to include in the initial `lm` calls.
+
+
+Column                Include?           Note
+-----------------     -----------------  --------------------------
+`wins`*               target variable
+`base_hits`           yes            
+`doubles`             yes                
+`triples`*            yes    
+`homeruns`*           yes    
+`walks`*              yes    
+`free_base`           exclude            92% missing
+`out_at_bat`*         yes    
+`stolen_base`*        yes    
+`caught_stealing`     exclude            34% missing, correlated with `stolen_base`
+`errors`              yes    
+`double_plays`        exclude            no correlation with `wins`, high `NA`s
+`walks_allowed`*      yes                remove ten outliers
+`hits_allowed`*       yes                remove 41 outliers
+`homeruns_allowed`*   yes    
+`strikeouts_thrown`*  yes                remove five outliers
+
+
+Columns marked with an asterisk have observations with zeros.
+
+
+
+## Selecting Rows
+
+
+```{r}
+# ============================
+# Data Preparation
+# ============================
+
+# ============================
+# Selecting Rows
+# ============================
+
+
+# What record has wins == 0?  Record 1211
+# It has all sorts of weird data
+# This record should be deleted.
+which(mb2276$wins == 0)
+mb2276[1211, ] %>% as.data.frame
+
+
+# How many observations have zeros?  How many zeros per row?
+row_zero_count <- 
+  apply(mb2276, 1, function(x) {sum(x == 0, na.rm = TRUE)})
+
+table(row_zero_count)
+delete_zeros <- row_zero_count > 0
+sum(delete_zeros) #28 rows with zeros
+
+
+# What rows to delete for NAs?
+row_NA_count <- mb2276 %>% 
+  select(out_at_bat, stolen_base, strikeouts_thrown) %>% 
+  apply(
+    X = ., 
+    MARGIN = 1, 
+    FUN = function(x) {sum(is.na(x))})
+
+table(row_NA_count)
+delete_NAs <- row_NA_count > 0
+sum(delete_NAs)
+sum(delete_NAs & !delete_zeros)
+
+
+# Outliers to remove...
+# Top 10 walks_allowed
+
+walks_allowed_outliers <- coalesce(
+  mb2276$walks_allowed >= sort(mb2276$walks_allowed, dec = TRUE)[10], 
+  FALSE)
+
+strikeouts_thrown_outliers <- coalesce(
+  mb2276$strikeouts_thrown >= sort(mb2276$strikeouts_thrown, dec = TRUE)[5],
+  FALSE)
+
+hits_allowed_outliers <- coalesce(
+  mb2276$hits_allowed > 5000,
+  FALSE)
+
+sum(walks_allowed_outliers)
+sum(strikeouts_thrown_outliers)
+sum(hits_allowed_outliers)
+
+delete_outliers <-
+  walks_allowed_outliers | strikeouts_thrown_outliers | hits_allowed_outliers
+sum(delete_outliers)
+sum(delete_outliers & !delete_NAs & !delete_zeros)
+
+
+# Create logical vector for all removal rules
+delete_row <- delete_zeros | delete_NAs | delete_outliers
+sum(delete_row)
+sum(!delete_row)
+
+
+# Create new data frame with removed rows
+mb2016 <- mb2276[!delete_row, ] %>% 
+  select(-free_base, -caught_stealing, -double_plays)
+
+```
+
+
+I'm removing observations for the following reasons:
+
+* Zeros in above marked columns (28)
+* `NA`s in `out_at_bat`, `stolen_base`, or `strikeouts_thrown` (+211)
+* Outliers in `walks_allowed`, `strikeouts_thrown`, and `hits_allowed` (+21)
+
+This leaves 2016 rows in our data set, wich much more reasonable maximums,
+means, and standard deviations.
+
+```{r}
+# Show summary statistics after removing 260 records
+profile_mb2016 <- info(mb2016)
+
+```
+
+```{r}
+caption <- 'Summary statistics after removing 260 rows'
+profile_mb2016 %>%
+  knitr::kable(
+    caption = caption, 
+    digits = c(0, 0, 0, 0, 0, 0, 0, 1, 0, 0))
+```
+
+
+\pagebreak
+
+## Derived Columns
+
+I'm going to create a column for singles, which is `base_hits` less
+`doubles`, `triples`, and `homeruns`.
+
+```{r}
+
+# ============================
+# Derived Columns
+# ============================
+
+mb2016s <- mb2016 %>% 
+  mutate(singles = base_hits - homeruns - doubles - triples) %>% 
+  select(-base_hits)
+
+ggplot(data = mb2016s) +
+  aes(x = singles) +
+  geom_density(size = 2) +
+  labs(title = "Distribution of derived column singles")
+```
+
+
+
+
+
+
+# Build Models
+
+## Saturated Model #1
+
+First, I try building a saturated model.
+
+```{r}
+
+# ============================
+# Build Models
+# ============================
+
+# ============================
+# Saturated Model #1
+# ============================
+
+
+library(broom)
+saturated <- lm(wins ~ ., data = mb2016s)
+saturated_broomed <- broom::tidy(saturated)
+
+caption <- 'Saturated model #1'
+saturated_broomed %>%
+  knitr::kable(
+    caption = caption, 
+    digits = c(NA, 2, 4, 2, 4))
+```
+
+```{r}
+summary(saturated)
+```
+
+The $F$-statistic of this model has a $p$-value near zero,
+and the $t$-values of most of these most of these coefficients
+are very low.
+
+* `doubles` is negative when we are expecting positive
+* `hits_allowed` is positive when we are expecting negative, 
+   but it has a high probability that we cannot reject 
+   the null hypothesis that the coefficient is zero
+* `singles` has a very high $p$-value, which is not expected at all
+
+The diagnostic plots imply that there have been no 
+egregious violations of the assumptions of normality.
+
+```{r}
+par(mfrow = c(1, 2))
+plot(saturated, which = 1:2)
+```
+
+
+## Use `base_hits` instead of `singles`
+
+Maybe the decision to add `singles` as a derived column was not a good one.
+Replacing `singles` with `base_hits`, while leaving in `doubles`, `triples`, 
+and `homeruns`, doesn't improve the model.
+
+```{r}
+
+# ============================
+# Use `base_hits` instead of `singles`
+# ============================
+
+# What happens if we add base_hits back in?
+# Instead of singles?
+lm_basehits <- lm(wins ~ walks + homeruns + 
+     triples + errors + stolen_base +     
+     out_at_bat + homeruns_allowed + 
+     strikeouts_thrown + doubles + 
+     walks_allowed + hits_allowed + mb2016$base_hits, data = mb2016s)
+
+basehits_broomed <- broom::tidy(lm_basehits)
+
+caption <- 'Model with basehits'
+basehits_broomed %>%
+  knitr::kable(
+    caption = caption, 
+    digits = c(NA, 2, 4, 2, 4))
+```
+
+
+
+
+## Remove `doubles` and `singles`
+
+The final candidate model I will consider is one where all regressors
+are present except for `base_hits`, `singles`, and `doubles`.
+While `doubles` beta has a low $p$-value in the saturated model,
+I don't like the sign of the coefficient, so I'd prefer to remove it.
+
+```{r}
+
+# ============================
+# Remove `doubles` and `singles`
+# ============================
+
+# Try model less doubles and singles
+less_singles_doubles <- mb2016s %>% 
+  select(-singles, -doubles) %>% 
+  lm(wins ~ ., data = .)
+
+less_singles_doubles_broomed <- 
+  broom::tidy(less_singles_doubles)
+
+caption <- 'Saturated less singles and doubles'
+less_singles_doubles_broomed %>%
+  knitr::kable(
+    caption = caption, 
+    digits = c(NA, 2, 4, 2, 4))
+```
+
+
+
+
+# Select Models
+
+## Select by adjusted-$R^2$
+
+In a course I took a year ago, 
+I wrote a procedure which runs all regressions,
+and I've used it to find the model that gives the best
+adjusted-$R^2$ for this data set.
+
+```{r}
+
+# ============================
+# Select Models
+# ============================
+
+
+# ============================
+# Select by adjusted-$R^2$
+# ============================
+
+
+# Custom code
+# See resources.R for all_regressions
+lm_all <- mb2016s %>% 
+  mutate(ID = 1:nrow(mb2016s)) %>% 
+  rename(y = wins) %>%
+  select(ID, y, everything()) %>% 
+  all_regressions(.)
+
+# Six models with the top Adj-R2
+# Model "111111111110" is the best
+# 111111111110 is a bit mask for the regressors
+lm_all$stats %>% arrange(desc(R_2adj)) %>% head(5)
+lm_all$models["111111111110"]
+```
+
+
+```{r}
+
+all_top5 <- lm_all$stats %>% 
+  arrange(desc(R_2adj)) %>% 
+  head(., 5) %>%
+  select(-k, -p, -R_2PRESS, -MS_Res)
+
+caption <- 'Top 5 by Adj R2'
+all_top5 %>% 
+  knitr::kable(
+    caption = caption, 
+    digits = c(NA, 0, 3, 4, 2))
+
+```
+
+Table: Top five models by adjusted-$R^2$
+
+|model                           | SS_Res|   R_2|  R_2adj|   C_p|
+|:-------------------------------|------:|-----:|-------:|-----:|
+| All less singles               | 243429| 0.376|  0.3723| 11.18|
+| Saturated                      | 243407| 0.376|  0.3721| 13.00|
+| All less hits_allowed          | 243756| 0.375|  0.3715| 13.87|
+| Less hits_allowed and doubles  | 244283| 0.374|  0.3705| 16.21|
+| Less doubles                   | 244177| 0.374|  0.3704| 17.33|
+
+
+
+## Final model
+
+The model I will present is with all regressors *except* `singles`
+(and `base_hits` that `singles` replaced).
+
+I'm including a coefficients table and an ANOVA table
+for the final model.
+
+```{r}
+
+# ============================
+# Final model
+# ============================
+
+final_model <- mb2016s %>% 
+  select(-singles, homeruns) %>% 
+  lm(wins ~ ., data = .)
+
+final_model_broomed <- final_model %>% 
+  broom::tidy()
+
+final_anova_broomed <- final_model %>% 
+  anova %>% 
+  broom::tidy()
+
+caption <- 'Final model: all less singles'
+final_model_broomed %>%
+  knitr::kable(
+    caption = caption, 
+    digits = c(NA, 2, 4, 2, 4))
+
+caption <- 'Final model ANOVA table'
+final_anova_broomed %>%
+  knitr::kable(
+    caption = caption, 
+    digits = c(NA, 0, 0, 0, 1, 4))
+
+```
+
+The ANOVA shows partial $F$-tests for adding each variable in order.
+`hits_allowed` has the highest $p$-value, but I am not concerned.
+
+
+
+
+### Diagnostic Plots
+
+```{r}
+
+# ============================
+# Diagnostic Plots
+# ============================
+
+par(mfrow = c(1, 2))
+plot(final_model, which = 1:2)
+```
+
+
+
+
+
+### Predictions
+
+```{r}
+
+# ============================
+# Predictions
+# ============================
+
+
+
+# EVAL data with original column names
+mb_eval_og <- read_csv(
+  '621/hw01/moneyball-evaluation-data.csv')
+
+# Gain a basic understanding of dimension
+# and structure
+dim(mb_eval_og)
+names(mb_eval_og)
+summary(mb_eval_og)
+head(mb_eval_og)
+str(mb_eval_og)
+
+# Rename columns to make them easier to recognize
+mb_eval <- mb_eval_og %>% rename(
+  base_hits         = TEAM_BATTING_H,
+  doubles           = TEAM_BATTING_2B,
+  triples           = TEAM_BATTING_3B,
+  homeruns          = TEAM_BATTING_HR,
+  walks             = TEAM_BATTING_BB,
+  free_base         = TEAM_BATTING_HBP,
+  out_at_bat        = TEAM_BATTING_SO,
+  stolen_base       = TEAM_BASERUN_SB,
+  caught_stealing   = TEAM_BASERUN_CS,
+  errors            = TEAM_FIELDING_E,
+  double_plays      = TEAM_FIELDING_DP,
+  walks_allowed     = TEAM_PITCHING_BB,
+  hits_allowed      = TEAM_PITCHING_H,
+  homeruns_allowed  = TEAM_PITCHING_HR,
+  strikeouts_thrown = TEAM_PITCHING_SO)
+
+info(mb_eval)
+
+eval_predictions <- data.frame(
+  Index = mb_eval$INDEX,
+  prediction = predict(final_model, mb_eval))
+
+write_csv(eval_predictions, 'Adam_Rich_HW1_Predictions.csv')
+```
+
+
+
