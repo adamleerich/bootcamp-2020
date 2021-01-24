@@ -1,0 +1,13 @@
+author: "Adam Rich, FCAS"
+center: "true"
+controls: "false"
+controlsTutorial: "false"
+progress: "false"
+slideNumber: "true"
+revealjs-url: "../_common/reveal.js"
+theme: "black"
+transition: "none"
+backgroundTransition: "none"
+lang: "en-US"
+css: "../_common/custom.css"
+

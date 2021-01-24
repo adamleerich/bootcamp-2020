@@ -1,0 +1,7 @@
+# Get Down with RMarkdown
+
+```{r include=FALSE}
+source('common.R')
+```
+
+## 
