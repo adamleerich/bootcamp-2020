@@ -1,0 +1,38 @@
+---
+title: "TODO"
+editor_options:
+  chunk_output_type: console
+title-slide-attributes:
+  data-background-image: "TODO.jpg"
+  class: "center"
+---
+
+
+```{r setup, eval=TRUE, echo=FALSE, results='hide'}
+source('../_common/common.R')
+library(ggplot2)
+library(tidyverse)
+```
+
+
+
+## Example of columns
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r }
+i <- 5:9
+i[c(TRUE, FALSE, FALSE, FALSE, TRUE)]
+i[i > 7]
+```
+:::
+::: {.column}
+```{r }
+b <- i > 7
+b
+i[b]
+```
+:::
+::::::::::::::
+
+

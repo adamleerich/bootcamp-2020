@@ -1,3 +1,19 @@
+How to develop a presentation
+==================================
+
+Give each presentation its own subfolder of *presentations*.
+Every presentation has its own Rproj.
+Just put everything that presentation needs in its folder.
+When you need to *build* the slides, run this at the command line
+from the folder you are working in:
+
+    ..\..\build.bat filename.Rmd
+    
+
+
+
+
+
 Notes for next year
 ===========================
 
