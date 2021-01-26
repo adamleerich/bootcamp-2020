@@ -1,0 +1,76 @@
+---
+title: "Loss Distributions"
+editor_options:
+  chunk_output_type: console
+title-slide-attributes:
+  # data-background-image: "TODO.jpg"
+  class: "center"
+---
+
+
+```{r setup, eval=TRUE, echo=FALSE, results='hide'}
+source('../_common/common.R')
+library(ggplot2)
+library(tidyverse)
+```
+
+
+
+
+
+Topics Ashley wants to cover:
+
+* simulation
+* sampling from distributions
+* fitting distributions
+* `actuar` for fits to censored or truncated data
+* use `optim` directly
+* fancy function for visualizing what distribution might be best
+* fat-tails
+
+
+
+TODO
+
+* what is the difference between simulation and sampling?
+* maybe add in something about using C++ for interative work?
+* Find old note about MLE
+* What of this is on the FIA exams?
+
+
+
+
+Other things to cover:
+
+* negative binomial
+* quasipoisson regression
+* zero-inflated regression
+* glm.nb versus quasipoisson
+* fitting -> sim -> fitting checks
+
+
+
+What are all the loss distributions one can use in R?
+
+
+
+## Example of columns
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r }
+i <- 5:9
+i[c(TRUE, FALSE, FALSE, FALSE, TRUE)]
+i[i > 7]
+```
+:::
+::: {.column}
+```{r }
+b <- i > 7
+b
+i[b]
+```
+:::
+::::::::::::::
+
+
