@@ -3,74 +3,722 @@ title: "Loss Distributions"
 editor_options:
   chunk_output_type: console
 title-slide-attributes:
-  # data-background-image: "TODO.jpg"
-  class: "center"
+  data-background-image: tools-1083796_1920.jpg
+  class: center
+# output: slidy_presentation
 ---
 
 
 ```{r setup, eval=TRUE, echo=FALSE, results='hide'}
 source('../_common/common.R')
-library(ggplot2)
 library(tidyverse)
+library(ggplot2)
+library(MASS)
+library(actuar)
+library(fitdistrplus)
 ```
 
 
 
 
+# Example
 
-Topics Ashley wants to cover:
+Let's start with some real loss data.
 
-* simulation
-* sampling from distributions
-* fitting distributions
-* `actuar` for fits to censored or truncated data
-* use `optim` directly
-* fancy function for visualizing what distribution might be best
-* fat-tails
-
-
-
-TODO
-
-* what is the difference between simulation and sampling?
-* maybe add in something about using C++ for interative work?
-* Find old note about MLE
-* What of this is on the FIA exams?
+```{sql eval=FALSE}
+select ...
+  from Report.ClaimExposureSectionCombinedView
+ where TriFocusName in ('EPL', 'BICI EPL MM', 'BUSA EPL MM')
+   and ExposureYOA between 2010 and 2019
+   and left(ExposureStatus, 1) = 'C'
+   and BlockIndicator = 0
+   and coalesce(LimitInUSD, 0) > 0
+   and coalesce(ExcessInUSD, DeductibleInUSD, 0) > 0
+   and SlipOrderTotalPaid > 0
+   and SettlementCurrency = 'USD';
+```
 
 
 
 
-Other things to cover:
+# EPL Losses
 
-* negative binomial
-* quasipoisson regression
-* zero-inflated regression
-* glm.nb versus quasipoisson
-* fitting -> sim -> fitting checks
+```{r eval=TRUE, echo=FALSE, results='hide'}
+library(tidyverse)
+
+epl_cols <- cols(
+  TriFocusName = col_character(),
+  ExposureYOA = col_character(),
+  ExposureReference = col_character(),
+  BeazleyCat = col_character(),
+  Category = col_character(),
+  DateOfLoss = col_date(format = ""),
+  ClaimMadeDate = col_date(format = ""),
+  ExposureOpenedDate = col_date(format = ""),
+  LatestExposureClosedDate = col_date(format = ""),
+  LimitInUSD = col_double(),
+  ExcessInUSD = col_double(),
+  DeductibleInUSD = col_double(),
+  SettlementCurrency = col_character(),
+  SlipOrderFeesPaid = col_double(),
+  SlipOrderIndemnityPaid = col_double(),
+  SlipOrderDefencePaid = col_double(),
+  SlipOrderTotalPaid = col_double())
+
+epl_path <- 
+  'C:/Users/richad/OneDrive - Beazley Group/Desktop/epl-for-r-training.csv'
+
+epl <- readr::read_csv(epl_path, col_types = epl_cols)
+```
+
+```{r eval=FALSE}
+library(tidyverse)
+epl <- readr::read_csv('epl-for-r-training.csv')
+```
+
+```{r}
+dim(epl)
+table(epl$ExposureYOA)
+```
 
 
 
-What are all the loss distributions one can use in R?
+
+# Summaries
+
+```{r results='markup', echo=FALSE}
+info(epl) %>% 
+  filter(type == 'numeric') %>% 
+  dplyr::select(column, min, mean, max, sd, zero_count, na_count) %>% 
+  knitr::kable(digits = 0,format.args = list(big.mark = ','))
+```
 
 
 
-## Example of columns
 
+# Summaries
+
+```{r results='markup', echo=FALSE}
+info(epl) %>% 
+  filter(type != 'numeric') %>% 
+  dplyr::select(column, type, na_count, unique_values) %>% 
+  knitr::kable(digits = 0,format.args = list(big.mark = ','))
+```
+
+
+
+
+# Total Paid
 :::::::::::::: {.columns}
 ::: {.column}
-```{r }
-i <- 5:9
-i[c(TRUE, FALSE, FALSE, FALSE, TRUE)]
-i[i > 7]
+```{r echo=FALSE}
+hist(epl$SlipOrderTotalPaid, breaks = 20)
 ```
 :::
 ::: {.column}
-```{r }
-b <- i > 7
-b
-i[b]
+```{r echo=FALSE}
+hist(log(epl$SlipOrderTotalPaid), breaks = 20)
 ```
 :::
 ::::::::::::::
+
+
+
+
+
+# Indemnity + Defence
+```{r echo=FALSE}
+x <- epl$SlipOrderIndemnityPaid + epl$SlipOrderDefencePaid
+y <- x[x > 0]
+```
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=FALSE}
+hist(y, breaks = 20)
+```
+:::
+::: {.column}
+```{r echo=FALSE}
+hist(log(y), breaks = 20)
+```
+:::
+::::::::::::::
+
+
+
+
+
+# Fees only
+```{r echo=FALSE}
+x <- epl$SlipOrderFeesPaid
+y <- x[x > 0]
+```
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=FALSE}
+hist(y, breaks = 20)
+```
+:::
+::: {.column}
+```{r echo=FALSE}
+hist(log(y), breaks = 20)
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+# Most frequent value for fees
+
+```{r}
+exp(5.8)
+x <- round(epl$SlipOrderFeesPaid / 100, 0) * 100
+table(x[x < 1001])
+```
+
+
+
+# Ignore fees for now
+
+Because of the weirdness in the distribution of fees,
+let's look at indemnity + defence only.
+
+```{r}
+epl$IndemnityAndDefence <- 
+  epl$SlipOrderIndemnityPaid + epl$SlipOrderDefencePaid
+x <- epl$IndemnityAndDefence[epl$IndemnityAndDefence > 0]
+mean(x)
+sd(x)
+```
+
+```{r eval=FALSE, echo=FALSE}
+readr::write_rds(x, 'paids-x-fees.Rds')
+```
+
+
+
+# Severity distributions
+
+Common severity distributions are
+
+* gamma
+* Pareto
+* Weibull
+* log-normal
+* Burr
+
+
+
+
+
+# Gamma distribution
+
+* Two-parameters
+    + shape and scale, or
+    + shape and rate 
+    + rate = 1/scale
+* $\textrm{E}(X) = \textrm{shape} \times \textrm{scale}$
+* $\textrm{scale} = \textrm{Var}(X) / \textrm{E}(X)$, aka *index of dispersion*
+* $\textrm{shape} = \textrm{E}(X) / \textrm{scale}$
+
+
+
+# Method-of-moments
+
+```{r}
+n <- length(x)
+pvar_x <- var(x) * (n-1) / n
+exp_x <- mean(x)
+
+(gamma_scale <- pvar_x / exp_x)
+(gamma_shape <- exp_x / gamma_scale)
+
+fitdistrplus::fitdist(x, 'gamma', 'mme')
+```
+
+
+
+
+# Gamma theoretical quantiles
+
+```{r}
+x_gamma_theoretical <- qgamma(
+  ppoints(n), 
+  shape = gamma_shape, 
+  scale = gamma_scale)[rank(x)]
+```
+
+
+
+
+# Gamma Q-Q plots
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r}
+plot(x_gamma_theoretical, x)
+```
+:::
+::: {.column}
+```{r}
+plot(log(x_gamma_theoretical), log(x))
+```
+:::
+::::::::::::::
+
+
+
+
+# QQ plots
+
+:::::::::::::: {.columns}
+::: {.column}
+
+If our data were gamma distributed a **gamma Q-Q plot** would look like this:
+
+```{r}
+set.seed(0)
+y_gamma <- rgamma(n, shape = gamma_shape, scale = gamma_scale)
+y_gamma_theoretical <- qgamma(
+  ppoints(n), 
+  shape = gamma_shape, 
+  scale = gamma_scale)[rank(y_gamma)]
+```
+:::
+::: {.column}
+```{r echo=FALSE}
+plot(log(y_gamma_theoretical), log(y_gamma))
+```
+:::
+::::::::::::::
+
+
+
+
+# QQ plots versus `qqnorm`
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=FALSE}
+qqnorm(x)
+```
+:::
+::: {.column}
+```{r echo=FALSE}
+plot(x_gamma_theoretical, x, main = 'Gamma Q-Q Plot')
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+
+
+# What looks right?
+
+If our data were gamma distributed histograms would look like these:
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=FALSE}
+hist(y_gamma, breaks = 20)
+```
+:::
+::: {.column}
+```{r echo=FALSE}
+hist(log(y_gamma), breaks = 20)
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+# Pareto
+
+* Two-parameters
+    + shape and scale
+* $\textrm{E}(X) = \textrm{scale} / (\textrm{shape} - 1)$
+* $\textrm{Var}(X) = \textrm{E}(X)^2 \times \textrm{shape} / (\textrm{shape} - 2)$
+* $\textrm{shape} = 2\textrm{Var}(X) / (\textrm{Var}(X) - \textrm{E}(X)^2)$
+* $\textrm{shape} = 2\textrm{CV}^2 / (\textrm{CV}^2 - 1)$
+* $\textrm{scale} = \textrm{E}(X) \times (\textrm{shape - 1)}$
+
+
+
+# Method-of-moments
+
+```{r}
+n <- length(x)
+pvar_x <- var(x) * (n-1) / n
+exp_x <- mean(x)
+
+(pareto_shape <- 2 * pvar_x / (pvar_x - exp_x^2))
+(pareto_scale <- exp_x * (pareto_shape - 1))
+
+fitdistrplus::fitdist(
+  data = x, 
+  distr = 'pareto', 
+  method = 'mme', 
+  order = 1:2,
+  memp = function(x, order) mean(x^order))
+```
+
+
+
+
+
+# Pareto Q-Q plots
+```{r echo=FALSE}
+x_theoretical <- qpareto(
+  ppoints(n), 
+  shape = pareto_shape, 
+  scale = pareto_scale)[rank(x)]
+```
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=FALSE}
+plot(x_theoretical, x)
+```
+:::
+::: {.column}
+```{r echo=FALSE}
+plot(log(x_theoretical), log(x))
+```
+:::
+::::::::::::::
+
+
+
+
+# What looks right?
+
+If our data were Pareto distributed, histograms would look like these:
+
+```{r echo=FALSE}
+set.seed(123)
+y_pareto <- rpareto(n, shape = pareto_shape, scale = pareto_scale)
+```
+
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=FALSE}
+hist(y_pareto, breaks = 20)
+```
+:::
+::: {.column}
+```{r echo=FALSE}
+hist(log(y_pareto), breaks = 20)
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+# Weibull
+
+* Two-parameters
+    + shape and scale
+* $\textrm{E}(X) = \textrm{scale} \times \Gamma(1 + 1/\textrm{shape})$
+* $\textrm{E}(X^2) = \textrm{scale}^2 \times \Gamma(1 + 2/\textrm{shape})$
+* Most of the time, we cannot calculate the solutions to these
+
+
+# Method-of-moments
+
+```{r}
+fit <- fitdistrplus::fitdist(
+  data = x, 
+  distr = 'weibull', 
+  method = 'mme', 
+  order = 1:2,
+  memp = function(x, order) mean(x^order))
+
+(weibull_shape <- fit$estimate[1])
+(weibull_scale <- fit$estimate[2])
+```
+
+
+
+
+
+# Weibull Q-Q plots
+```{r echo=FALSE}
+x_theoretical <- qpareto(
+  ppoints(n), 
+  shape = weibull_shape, 
+  scale = weibull_scale)[rank(x)]
+```
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=FALSE}
+plot(x_theoretical, x)
+```
+:::
+::: {.column}
+```{r echo=FALSE}
+plot(log(x_theoretical), log(x))
+```
+:::
+::::::::::::::
+
+
+
+
+# What looks right?
+
+If our data were Weibull distributed, histograms would look like these:
+
+```{r echo=FALSE}
+set.seed(9823)
+y_weibull <- rweibull(n, shape = weibull_shape, scale = weibull_scale)
+```
+
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=FALSE}
+hist(y_weibull, breaks = 20)
+```
+:::
+::: {.column}
+```{r echo=FALSE}
+hist(log(y_weibull), breaks = 20)
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+
+# Log-normal
+
+* Two-parameters
+    + `meanlog` and `sdlog`
+    + `mean` and `sd` of underlying normal distribution
+* $\textrm{E}(X) = \exp(\mu + 1/2\sigma^2)$
+* $\textrm{E}(X^2) = \exp(2\mu + 2\sigma^2)$
+* $\sigma^2 = \ln \textrm{E}(X^2) - 2\ln \textrm{E}(X)$
+* $\mu = \ln \textrm{E}(X) - 1/2 \sigma^2$
+
+
+
+# Method-of-moments
+
+```{r}
+n <- length(x)
+exp_x <- mean(x)
+exp_x2 <- mean(x^2)
+
+lnorm_sigma2 <- log(exp_x2) - 2*log(exp_x)
+(lnorm_sigma <- sqrt(lnorm_sigma2))
+(lnorm_mu <- log(exp_x) - 0.5*lnorm_sigma2)
+
+fitdistrplus::fitdist(x, 'lnorm', 'mme')
+```
+
+
+
+
+
+# Log-normal Q-Q plots
+```{r echo=FALSE}
+x_theoretical <- qlnorm(
+  ppoints(n), 
+  lnorm_mu, 
+  lnorm_sigma)[rank(x)]
+```
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r}
+plot(x_theoretical, x)
+```
+:::
+::: {.column}
+```{r}
+plot(log(x_theoretical), log(x))
+```
+:::
+::::::::::::::
+
+
+
+
+# What looks right?
+
+If our data were Log-normal distributed, histograms would look like these:
+
+```{r echo=FALSE}
+set.seed(-49)
+y_lognormal <- rlnorm(n, meanlog = lnorm_mu, sdlog = lnorm_sigma)
+```
+
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=FALSE}
+hist(y_lognormal, breaks = 20)
+```
+:::
+::: {.column}
+```{r echo=FALSE}
+hist(log(y_lognormal), breaks = 20)
+```
+:::
+::::::::::::::
+
+
+
+
+# CDFs
+
+```{r echo=FALSE, fig.width=8, fig.height=4.5}
+xin <- exp(seq(from = 3.4, to = 16.2, by = 0.2))
+xecdf <- ecdf(x)
+pout_gamma <- pgamma(xin, shape = gamma_shape, scale = gamma_scale)
+pout_weibull <- pweibull(xin, shape = weibull_shape, scale = weibull_scale)
+pout_lnorm <- plnorm(xin, meanlog = lnorm_mu, sdlog = lnorm_sigma)
+pout_pareto <- ppareto(xin, shape = pareto_shape, scale = pareto_scale)
+pout_ecdf <- xecdf(xin)
+
+cdfs <- data.frame(
+  x = rep(xin, times = 5),
+  y = c(pout_gamma, pout_weibull, pout_lnorm, pout_pareto, pout_ecdf),
+  distribution = rep(
+    c('Gamma', 'Weibull', 'Log-normal', 'Pareto', 'Empirical'), 
+    each = length(xin)))
+
+cdfs %>% 
+  ggplot() +
+  aes(x = x, y = y, color = distribution, shape = distribution) +
+  geom_line(size = 1.2) +
+  geom_point() +
+  scale_x_log10() +
+  labs(title = 'Cumulative distribution functions') +
+  ylab(NULL)
+```
+
+
+
+
+# CDFs
+
+```{r echo=FALSE, fig.width=8, fig.height=4.5}
+cdfs %>% 
+  ggplot() +
+  aes(x = x, y = y, color = distribution, shape = distribution) +
+  geom_line(size = 1.2) +
+  geom_point() +
+  coord_cartesian(xlim = c(1e6, 5e6), ylim = c(0.95, 1.0)) +
+  scale_x_log10() +
+  labs(title = 'Cumulative distribution functions (right-tail only)') +
+  ylab(NULL)
+```
+
+
+
+
+
+
+# Histograms
+
+```{r echo=FALSE, fig.width=8, fig.height=4.5}
+library(gridExtra)
+
+h <- data.frame(
+  y = c(y_gamma, y_weibull, y_lognormal, y_pareto),
+  x = rep(x, times = 4),
+  distribution = rep(
+    c('Gamma', 'Weibull', 'Log-normal', 'Pareto'), 
+    each = length(x)))
+
+ggplot(h) +
+  geom_density(aes(x = y, fill = distribution), alpha = 0.5) +
+  geom_density(aes(x = x), size = 1) +
+  coord_cartesian(xlim = c(1e3, 10e6)) +
+  scale_x_log10() +
+  facet_wrap(~distribution) +
+  theme(legend.position = "none") +
+  labs(title = 'Density functions versus Empirical')
+```
+
+
+
+
+
+# Maximum likelihood
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=FALSE}
+fit <- fitdistrplus::fitdist(x, distr = 'lnorm', method = 'mle')
+print(fit)
+```
+:::
+::: {.column}
+```{r echo=FALSE}
+# Check against method-of-moments
+fitdistrplus::fitdist(x, distr = 'lnorm', method = 'mme')
+```
+:::
+::::::::::::::
+
+
+
+
+# Censored and truncated data
+
+`fitdistrplus` has a function for this.
+It works really well, but your data has to be correct.
+That is the complicated part!
+*We could do an entire session on the topic.*
+
+
+
+
+# Goodness-of-fit testing
+
+```{r}
+fit1 <- fitdist(x, distr = 'lnorm', method = 'mle')
+
+fit2 <- fitdist(
+  data = x, 
+  distr = 'pareto', 
+  method = 'mme', 
+  order = 1:2,
+  memp = function(x, order) mean(x^order))
+
+fit3 <- fitdist(x, distr = 'gamma', method = 'mme')
+```
+
+
+
+# 
+```{r}
+gofstat(
+  f = list(fit1, fit2, fit3), 
+  fitnames = c('Log-normal MLE', 'Pareto', 'Gamma'))
+```
+
+
+
 
 
