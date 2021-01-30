@@ -21,64 +21,24 @@ library(fitdistrplus)
 
 
 
-# Example
 
-Let's start with some real loss data.
-
-```{sql eval=FALSE}
-select ...
-  from Report.ClaimExposureSectionCombinedView
- where TriFocusName in ('EPL', 'BICI EPL MM', 'BUSA EPL MM')
-   and ExposureYOA between 2010 and 2019
-   and left(ExposureStatus, 1) = 'C'
-   and BlockIndicator = 0
-   and coalesce(LimitInUSD, 0) > 0
-   and coalesce(ExcessInUSD, DeductibleInUSD, 0) > 0
-   and SlipOrderTotalPaid > 0
-   and SettlementCurrency = 'USD';
-```
-
-
-
-
-# EPL Losses
-
-```{r eval=TRUE, echo=FALSE, results='hide'}
-library(tidyverse)
-
-epl_cols <- cols(
-  TriFocusName = col_character(),
-  ExposureYOA = col_character(),
-  ExposureReference = col_character(),
-  BeazleyCat = col_character(),
-  Category = col_character(),
-  DateOfLoss = col_date(format = ""),
-  ClaimMadeDate = col_date(format = ""),
-  ExposureOpenedDate = col_date(format = ""),
-  LatestExposureClosedDate = col_date(format = ""),
-  LimitInUSD = col_double(),
-  ExcessInUSD = col_double(),
-  DeductibleInUSD = col_double(),
-  SettlementCurrency = col_character(),
-  SlipOrderFeesPaid = col_double(),
-  SlipOrderIndemnityPaid = col_double(),
-  SlipOrderDefencePaid = col_double(),
-  SlipOrderTotalPaid = col_double())
-
-epl_path <- 
-  'C:/Users/richad/OneDrive - Beazley Group/Desktop/epl-for-r-training.csv'
-
-epl <- readr::read_csv(epl_path, col_types = epl_cols)
-```
-
-```{r eval=FALSE}
-library(tidyverse)
-epl <- readr::read_csv('epl-for-r-training.csv')
-```
+# Sample Losses
 
 ```{r}
-dim(epl)
-table(epl$ExposureYOA)
+claims_cols <- cols(
+  PolicyYear = col_character(),
+  Reference = col_character(),
+  FeesPaid = col_double(),
+  IndemnityPaid = col_double(),
+  DefensePaid = col_double(),
+  TotalPaid = col_double())
+
+claims_path <- 'claims-for-r-training.csv'
+
+claims <- readr::read_csv(claims_path, col_types = claims_cols)
+
+dim(claims)
+table(claims$PolicyYear)
 ```
 
 
@@ -87,21 +47,9 @@ table(epl$ExposureYOA)
 # Summaries
 
 ```{r results='markup', echo=FALSE}
-info(epl) %>% 
+info(claims) %>% 
   filter(type == 'numeric') %>% 
   dplyr::select(column, min, mean, max, sd, zero_count, na_count) %>% 
-  knitr::kable(digits = 0,format.args = list(big.mark = ','))
-```
-
-
-
-
-# Summaries
-
-```{r results='markup', echo=FALSE}
-info(epl) %>% 
-  filter(type != 'numeric') %>% 
-  dplyr::select(column, type, na_count, unique_values) %>% 
   knitr::kable(digits = 0,format.args = list(big.mark = ','))
 ```
 
@@ -112,12 +60,12 @@ info(epl) %>%
 :::::::::::::: {.columns}
 ::: {.column}
 ```{r echo=FALSE}
-hist(epl$SlipOrderTotalPaid, breaks = 20)
+hist(claims$TotalPaid, breaks = 20)
 ```
 :::
 ::: {.column}
 ```{r echo=FALSE}
-hist(log(epl$SlipOrderTotalPaid), breaks = 20)
+hist(log(claims$TotalPaid), breaks = 20)
 ```
 :::
 ::::::::::::::
@@ -126,9 +74,9 @@ hist(log(epl$SlipOrderTotalPaid), breaks = 20)
 
 
 
-# Indemnity + Defence
+# Indemnity + Defense
 ```{r echo=FALSE}
-x <- epl$SlipOrderIndemnityPaid + epl$SlipOrderDefencePaid
+x <- claims$IndemnityPaid + claims$DefensePaid
 y <- x[x > 0]
 ```
 :::::::::::::: {.columns}
@@ -150,7 +98,7 @@ hist(log(y), breaks = 20)
 
 # Fees only
 ```{r echo=FALSE}
-x <- epl$SlipOrderFeesPaid
+x <- claims$FeesPaid
 y <- x[x > 0]
 ```
 :::::::::::::: {.columns}
@@ -175,7 +123,7 @@ hist(log(y), breaks = 20)
 
 ```{r}
 exp(5.8)
-x <- round(epl$SlipOrderFeesPaid / 100, 0) * 100
+x <- round(claims$FeesPaid / 100, 0) * 100
 table(x[x < 1001])
 ```
 
@@ -184,12 +132,12 @@ table(x[x < 1001])
 # Ignore fees for now
 
 Because of the weirdness in the distribution of fees,
-let's look at indemnity + defence only.
+let's look at indemnity + Defense only.
 
 ```{r}
-epl$IndemnityAndDefence <- 
-  epl$SlipOrderIndemnityPaid + epl$SlipOrderDefencePaid
-x <- epl$IndemnityAndDefence[epl$IndemnityAndDefence > 0]
+claims$IndemnityAndDefense <- 
+  claims$IndemnityPaid + claims$DefensePaid
+x <- claims$IndemnityAndDefense[claims$IndemnityAndDefense > 0]
 mean(x)
 sd(x)
 ```
@@ -197,6 +145,38 @@ sd(x)
 ```{r eval=FALSE, echo=FALSE}
 readr::write_rds(x, 'paids-x-fees.Rds')
 ```
+
+
+
+# Distributions suffixes
+
+|                                             |                                                                          |
+|:--------------------------------------------|:-------------------------------------------------------------------------|
+|beta, genbeta, trbeta, pearson6              |logarithmic, zmlogarithmic                                                |
+|binom, zmbinom, ztbinom                      |logis, llogis                                                             |
+|burr, invburr                                |nbinom, zmnbinom, ztnbinom                                                |
+|cauchy                                       |norm, invgauss                                                            |
+|chisq                                        |paralogis, invparalogis                                                   |
+|exp, invexp                                  |pareto, pareto1, pareto2, pareto3, pareto4, fpareto, invpareto, genpareto |
+|f                                            |pois, zmpois, ztpois                                                      |
+|gamma, invgamma, lgamma, trgamma, invtrgamma |pig, poisinvgauss                                                         |
+|geom, zmgeom, ztgeom                         |signrank                                                                  |
+|lgompertz                                    |t                                                                         |
+|gumbel                                       |unif                                                                      |
+|hyper                                        |weibull, invweibull                                                       |
+|lnorm                                        |wilcox                                                                    |
+
+
+
+
+
+# Function Prefixes
+
+* `d` = density
+* `p` = cumulative probability
+* `q` = quantiles, i.e. inverse of `p`
+* `r` = randomly generated values
+
 
 
 
@@ -209,6 +189,19 @@ Common severity distributions are
 * Weibull
 * log-normal
 * Burr
+
+
+
+
+
+# Examples
+
+```{r}
+dnorm(0.5)
+pnorm(0.5)
+qnorm(.975)
+rnorm(1e3) %>% mean()
+```
 
 
 
@@ -711,12 +704,14 @@ fit3 <- fitdist(x, distr = 'gamma', method = 'mme')
 
 
 
-# 
+# Goodness-of-fit testing
+
 ```{r}
-gofstat(
+fitdistrplus::gofstat(
   f = list(fit1, fit2, fit3), 
   fitnames = c('Log-normal MLE', 'Pareto', 'Gamma'))
 ```
+
 
 
 
