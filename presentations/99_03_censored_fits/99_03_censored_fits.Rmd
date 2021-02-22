@@ -1,0 +1,25 @@
+---
+title: "Fitting Censored and Truncated Data"
+editor_options:
+  chunk_output_type: console
+title-slide-attributes:
+  data-background-image: light-1030988_1920.jpg
+  class: center
+# output: slidy_presentation
+---
+
+
+```{r setup, eval=TRUE, echo=FALSE, results='hide'}
+source('../_common/common.R')
+library(tidyverse)
+library(ggplot2)
+library(MASS)
+library(actuar)
+library(fitdistrplus)
+```
+
+
+
+
+
+# Sample Losses
