@@ -154,8 +154,8 @@ fitdistrplus::fitdist(
   claims$beazley[claims$beazley > 0], 
   distr = 'lnorm', 
   method = 'mme')
-qlnorm(c(0.1, 0.98), 9.98, 1.07)
-plnorm(c(1000, 500e3), 9.98, 1.07)
+qlnorm(c(0.1, 0.98), 10.02, 1.06)
+plnorm(c(1000, 500e3), 10.02, 1.06)
 ```
 
 
@@ -163,19 +163,16 @@ plnorm(c(1000, 500e3), 9.98, 1.07)
 
 ## Maximum Likelihood Estimation
 
-Basic idea:
-
-1. n observations
-2. make an assumption about the parametric form of the underlying distribution
-3. what is the probability of seeing each observation given those assumptions?
-4. multiply all those probabilities together
-5. change parameters in #2 until #4 is maximized
-
-What we actually do:
-
-* #4 gets really small really fast
-* take logs and sum instead
-* maximize that sum
+* *Basic idea*
+    1. n observations
+    2. make an assumption about the parametric form of the underlying distribution
+    3. what is the probability of seeing each observation given those assumptions?
+    4. multiply all those probabilities together
+    5. change parameters in #2 until #4 is maximized
+* *What we actually do*
+    4. #4 gets really small really fast
+    5. take logs and sum instead
+    6. **minimize** that sum
 
 
 
@@ -186,10 +183,112 @@ What we actually do:
 
 
 
+## Tag Claims
+
+```{r}
+claims$bucket <- 'ncens'
+claims$bucket[claims$beazley == 0] <- 'lcens'
+claims$bucket[claims$beazley == claims$policy_lim] <- 'rcens'
+table(claims$bucket)
+```
+
+
+## Case #1 Examples
+
+```{r echo=FALSE}
+claims[!duplicated(claims$bucket), ]
+```
 
 
 
 
+## MLE Case #1 Formula
+
+:::::::::::::: {.columns}
+::: {.column width="65%"}
+```{r}
+y <- (claims$beazley + claims$policy_ded)
+ncens <- y[claims$bucket == 'ncens']
+rcens <- y[claims$bucket == 'rcens']
+lcens <- y[claims$bucket == 'lcens']
+
+mle <- function(p) {
+  mu <- p[1]
+  sigma <- p[2]
+  -1 * sum(log(dlnorm(ncens, mu, sigma))) + 
+    -1 * sum(log(plnorm(lcens, mu, sigma))) + 
+    -1 * sum(log(1 - plnorm(rcens, mu, sigma)))
+}
+
+optim_res1 <- optim(c(10.02, 1.06), mle)
+```
+:::
+::: {.column width="35%"}
+```{r echo=FALSE}
+print(optim_res1)
+```
+:::
+::::::::::::::
+
+
+
+
+
+## MLE Case #2
+
+![](mle-note-case-2.png)
+
+```{r}
+claims2 <- claims[claims$beazley > 0, ]
+```
+
+
+
+
+## MLE Case #2 Formula
+
+:::::::::::::: {.columns}
+::: {.column width="65%"}
+```{r}
+y2 <- (claims2$beazley + claims2$policy_ded)
+d2 <- claims2$policy_ded
+ny2 <- y2[claims2$bucket == 'ncens']
+ry2 <- y2[claims2$bucket == 'rcens']
+nd2 <- d2[claims2$bucket == 'ncens']
+rd2 <- d2[claims2$bucket == 'rcens']
+
+mle2 <- function(p) {
+  m <- p[1]
+  s <- p[2]
+  -1 * sum(log(dlnorm(ny2, m, s) / (1 - plnorm(nd2, m, s)))) + 
+    -1 * sum(log((1 - plnorm(ry2, m, s)) / (1 - plnorm(rd2, m, s))))
+}
+
+optim_res2 <- optim(c(10.02, 1.06), mle2)
+```
+:::
+::: {.column width="35%"}
+```{r echo=FALSE}
+print(optim_res2)
+```
+:::
+::::::::::::::
+
+
+
+
+## Use `fitdistcens`
+
+```{r}
+claims$left <- claims$beazley + claims$policy_ded
+claims$right <- claims$beazley + claims$policy_ded
+claims$left[claims$bucket == 'lcens'] <- NA
+claims$right[claims$bucket == 'rcens'] <- NA
+claims[!duplicated(claims$bucket), ]
+fitdistcens(
+  censdata = claims[, c('left', 'right')],
+  distr = 'lnorm')
+```
 
 
 
