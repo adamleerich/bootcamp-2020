@@ -149,14 +149,32 @@ hist(log(claims$beazley[claims$beazley > 0]), breaks = 20, main = NULL)
 
 ## Ignoring Limits
 
+:::::::::::::: {.columns}
+::: {.column}
 ```{r}
 fitdistrplus::fitdist(
   claims$beazley[claims$beazley > 0], 
   distr = 'lnorm', 
   method = 'mme')
+
 qlnorm(c(0.1, 0.98), 10.02, 1.06)
 plnorm(c(1000, 500e3), 10.02, 1.06)
 ```
+:::
+::: {.column}
+```{r echo=FALSE}
+fitdistrplus::fitdist(
+  claims$beazley[claims$beazley > 0], 
+  distr = 'lnorm', 
+  method = 'mle')
+
+qlnorm(c(0.1, 0.98), 9.47, 1.71)
+plnorm(c(1000, 500e3), 9.74, 1.71)
+```
+:::
+::::::::::::::
+
+
 
 
 
@@ -168,11 +186,10 @@ plnorm(c(1000, 500e3), 10.02, 1.06)
     2. make an assumption about the parametric form of the underlying distribution
     3. what is the probability of seeing each observation given those assumptions?
     4. multiply all those probabilities together
-    5. change parameters in #2 until #4 is maximized
+    5. change parameters in #2 until #4 is **maximized**
 * *What we actually do*
-    4. #4 gets really small really fast
-    5. take logs and sum instead
-    6. **minimize** that sum
+    4. #4 gets really small really fast, so take logs and sum instead
+    5. **minimize** that sum
 
 
 
@@ -260,8 +277,12 @@ rd2 <- d2[claims2$bucket == 'rcens']
 mle2 <- function(p) {
   m <- p[1]
   s <- p[2]
-  -1 * sum(log(dlnorm(ny2, m, s) / (1 - plnorm(nd2, m, s)))) + 
-    -1 * sum(log((1 - plnorm(ry2, m, s)) / (1 - plnorm(rd2, m, s))))
+  -1 * sum(log(
+    dlnorm(ny2, m, s) / 
+      (1 - plnorm(nd2, m, s)))) + 
+    -1 * sum(log(
+      (1 - plnorm(ry2, m, s)) / 
+        (1 - plnorm(rd2, m, s))))
 }
 
 optim_res2 <- optim(c(10.02, 1.06), mle2)
@@ -290,5 +311,210 @@ fitdistcens(
   distr = 'lnorm')
 ```
 
+
+
+
+
+
+## GoF Tests: QQ plot
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=TRUE, eval=FALSE}
+set.seed(733)
+# Note number of new observations
+new_gu <- rlnorm(1e6, 9.26, 1.86)
+new_beazley <- pmin(policy_lim, pmax(new_gu - policy_ded, 0))
+qs <- 0:100/100
+plot(
+  log(quantile(claims$beazley + 1, qs)), 
+  log(quantile(new_beazley + 1, qs)))
+```
+:::
+::: {.column}
+```{r eval=TRUE, echo=FALSE}
+set.seed(733)
+# Note number of new observations
+new_gu <- rlnorm(1e6, 9.26, 1.86)
+new_beazley <- pmin(policy_lim, pmax(new_gu - policy_ded, 0))
+qs <- 0:100/100
+plot(
+  log(quantile(claims$beazley + 1, qs)), 
+  log(quantile(new_beazley + 1, qs)))
+```
+:::
+::::::::::::::
+
+
+
+
+
+## Check important stats
+
+Proportions less than a certain amount
+
+```{r}
+sum(new_beazley < 1) / 1e6
+sum(claims$beazley < 1) / 1e3
+
+mean(new_beazley)
+mean(claims$beazley)
+
+median(new_beazley)
+median(claims$beazley)
+```
+
+
+
+
+
+## Sample distributions of statistics
+
+```{r}
+index <- rep(1:1000, each = 1e3)
+
+tapply(new_beazley, index, function(x) {sum(x < 1) / 1000}) %>% 
+  summary
+
+tapply(new_beazley, index, mean) %>% 
+  summary
+
+tapply(new_beazley, index, median) %>% 
+  summary
+```
+
+
+
+
+
+
+## Real Data
+
+```{r}
+epl <- read.csv('data.csv')
+epl$Ref <- NULL
+epl$beazley <- epl$Indemnity + epl$Defense
+(epl$beazley >= epl$Limit) %>% sum
+(epl$Total >= epl$Limit) %>% sum
+epl[epl$Total >= epl$Limit, ]
+```
+
+
+
+## Visualize
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=FALSE}
+hist(epl$beazley, breaks = 20, main = '')
+```
+:::
+::: {.column}
+```{r echo=FALSE}
+hist(log(epl$beazley), breaks = 20, main = '')
+```
+:::
+::::::::::::::
+
+
+
+
+## Which case is this?
+
+Can we use `fitdistrplus`?
+
+
+
+
+## Case #2
+
+:::::::::::::: {.columns}
+::: {.column width="65%"}
+```{r}
+y <- epl$beazley + epl$Deductible
+d <- epl$Deductible
+bucket <- ifelse(epl$Total >= epl$Limit, 'rcens', 'ncens')
+
+ny <- y[bucket == 'ncens']
+ry <- y[bucket == 'rcens']
+nd <- d[bucket == 'ncens']
+rd <- d[bucket == 'rcens']
+
+mle <- function(p) {
+  m <- p[1]
+  s <- p[2]
+  -1 * sum(log(
+    dlnorm(ny, m, s) / 
+      (1 - plnorm(nd, m, s)))) + 
+    -1 * sum(log(
+      (1 - plnorm(ry, m, s)) / 
+        (1 - plnorm(rd, m, s))))
+}
+
+optim_res <- optim(c(10.0, 2.0), mle)
+```
+:::
+::: {.column width="35%"}
+```{r echo=FALSE}
+print(optim_res)
+```
+:::
+::::::::::::::
+
+
+
+
+
+
+## GoF Tests: QQ plot
+
+:::::::::::::: {.columns}
+::: {.column}
+```{r echo=TRUE, eval=FALSE}
+set.seed(87)
+# Note number of new observations
+new_gu <- rlnorm(1000 * length(y), 10.4037, 1.3056)
+new_beazley <- pmin(epl$Limit, pmax(new_gu - epl$Deductible, 0))
+sum(new_beazley < 1) / length(new_beazley)
+new_tbeazley <- new_beazley[new_beazley > 1][1:(300 * length(y))]
+
+qs <- 0:100/100
+plot(
+  log(quantile(epl$beazley + 1, qs)), 
+  log(quantile(new_tbeazley + 1, qs)))
+```
+:::
+::: {.column}
+```{r eval=TRUE, echo=FALSE}
+set.seed(733)
+# Note number of new observations
+new_gu <- rlnorm(1e6, 9.26, 1.86)
+new_beazley <- pmin(policy_lim, pmax(new_gu - policy_ded, 0))
+qs <- 0:100/100
+plot(
+  log(quantile(claims$beazley + 1, qs)), 
+  log(quantile(new_beazley + 1, qs)))
+```
+:::
+::::::::::::::
+
+
+
+
+<!--
+## Sample distributions of statistics
+
+```{r}
+index <- rep(1:300, each = length(epl$beazley))
+
+mean(epl$beazley)
+tapply(new_tbeazley, index, mean) %>% 
+  summary
+
+median(epl$beazley)
+tapply(new_tbeazley, index, median) %>% 
+  summary
+```
+-->
 
 
